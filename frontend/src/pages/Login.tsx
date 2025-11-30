@@ -43,8 +43,15 @@ const Login = () => {
       }
 
       // Store user info in localStorage (or use context/state management)
-      localStorage.setItem("user", JSON.stringify(data.user));
-      navigate("/");
+      const userData = { ...data.user, userType: data.userType };
+      localStorage.setItem("user", JSON.stringify(userData));
+      
+      // Route based on user type
+      if (data.userType === "hr") {
+        navigate("/hr/dashboard");
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       setError("Connection error. Make sure the backend is running on http://localhost:5001");
       console.error("Login error:", err);
