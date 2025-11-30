@@ -4,9 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, LogOut, CheckCircle2, XCircle } from "lucide-react";
-import LeavesApproval from "@/components/HR/LeavesApproval";
-import DeductionsManagement from "@/components/HR/DeductionsManagement";
-import PayrollGeneration from "@/components/HR/PayrollGeneration";
+import { LeavesApproval, DeductionsManagement, PayrollGeneration } from "@/components/HR";
 
 const HRDashboard = () => {
   const navigate = useNavigate();
