@@ -27,14 +27,13 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
-// Login endpoint
-app.post("/api/login", async (req, res) => {
+// HR Login endpoint
+app.post("/api/login/hr", async (req, res) => {
   try {
-    const { employeeId, password, userType } = req.body;
+    const { employeeId, password } = req.body;
 
-    console.log("Login attempt:", { employeeId, password, userType });
+    console.log("HR Login attempt:", { employeeId });
 
-    // Validate input
     if (!employeeId || !password) {
       return res.status(400).json({ 
         success: false, 
@@ -42,32 +41,26 @@ app.post("/api/login", async (req, res) => {
       });
     }
 
-    // Connect to database and call stored procedure
     const connection = await db.connectDB();
     console.log("Database connected");
     
+    // Use HRLoginValidation function
     const result = await connection.request()
       .input('employee_ID', employeeId)
       .input('password', password)
-      .execute('HRLoginValidation');
+      .query(`SELECT dbo.HRLoginValidation(@employee_ID, @password) as isValid`);
 
-    console.log("Stored procedure result:", result);
+    console.log("HR Validation result:", result.recordset);
 
-    // Check if the function returned a 1 (valid) or 0 (invalid)
-    // HRLoginValidation returns a BIT value (1 or 0)
-    const isValid = result.returnValue;
-
-    console.log("Validation result:", isValid);
-
-    if (!isValid || isValid === 0) {
-      console.log("Invalid credentials");
+    if (!result.recordset || result.recordset[0].isValid === false) {
+      console.log("Invalid HR credentials");
       return res.status(401).json({ 
         success: false, 
         error: "Invalid credentials" 
       });
     }
 
-    // Validation passed - fetch user details from Employee table
+    // Fetch user details
     const userResult = await connection.request()
       .input('employee_ID', employeeId)
       .query(`
@@ -79,10 +72,8 @@ app.post("/api/login", async (req, res) => {
           dept_name,
           employment_status
         FROM Employee 
-        WHERE employee_id = @employee_ID
+        WHERE employee_id = @employee_ID AND dept_name = 'HR'
       `);
-
-    console.log("User query result:", userResult);
 
     if (!userResult.recordset || userResult.recordset.length === 0) {
       return res.status(401).json({ 
@@ -92,11 +83,12 @@ app.post("/api/login", async (req, res) => {
     }
 
     const user = userResult.recordset[0];
-    console.log("User found:", user);
+    console.log("HR User found:", user);
 
     res.json({ 
       success: true, 
       message: "Login successful",
+      userType: "hr",
       user: {
         id: user.employee_id,
         firstName: user.first_name,
@@ -108,7 +100,155 @@ app.post("/api/login", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Login Error:", error);
+    console.error("HR Login Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Academic Employee Login endpoint
+app.post("/api/login/academic", async (req, res) => {
+  try {
+    const { employeeId, password } = req.body;
+
+    console.log("Academic Login attempt:", { employeeId });
+
+    if (!employeeId || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Employee ID and password are required" 
+      });
+    }
+
+    const connection = await db.connectDB();
+    console.log("Database connected");
+    
+    // Use EmployeeLoginValidation function (excludes HR)
+    const result = await connection.request()
+      .input('employee_ID', employeeId)
+      .input('password', password)
+      .query(`SELECT dbo.EmployeeLoginValidation(@employee_ID, @password) as isValid`);
+
+    console.log("Academic Validation result:", result.recordset);
+
+    if (!result.recordset || result.recordset[0].isValid === false) {
+      console.log("Invalid academic credentials");
+      return res.status(401).json({ 
+        success: false, 
+        error: "Invalid credentials" 
+      });
+    }
+
+    // Fetch user details
+    const userResult = await connection.request()
+      .input('employee_ID', employeeId)
+      .query(`
+        SELECT 
+          employee_id, 
+          first_name, 
+          last_name, 
+          email, 
+          dept_name,
+          employment_status
+        FROM Employee 
+        WHERE employee_id = @employee_ID AND dept_name != 'HR'
+      `);
+
+    if (!userResult.recordset || userResult.recordset.length === 0) {
+      return res.status(401).json({ 
+        success: false, 
+        error: "User not found" 
+      });
+    }
+
+    const user = userResult.recordset[0];
+    console.log("Academic User found:", user);
+
+    res.json({ 
+      success: true, 
+      message: "Login successful",
+      userType: "academic",
+      user: {
+        id: user.employee_id,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        email: user.email,
+        department: user.dept_name,
+        status: user.employment_status
+      }
+    });
+
+  } catch (error) {
+    console.error("Academic Login Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Admin Login endpoint
+app.post("/api/login/admin", async (req, res) => {
+  try {
+    const { employeeId, password } = req.body;
+
+    console.log("Admin Login attempt:", { employeeId });
+
+    if (!employeeId || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Employee ID and password are required" 
+      });
+    }
+
+    const connection = await db.connectDB();
+    console.log("Database connected");
+    
+    // Check if employee exists with correct password
+    const userResult = await connection.request()
+      .input('employee_ID', employeeId)
+      .input('password', password)
+      .query(`
+        SELECT 
+          employee_id, 
+          first_name, 
+          last_name, 
+          email, 
+          dept_name,
+          employment_status
+        FROM Employee 
+        WHERE employee_id = @employee_ID AND password = @password
+      `);
+
+    if (!userResult.recordset || userResult.recordset.length === 0) {
+      console.log("Invalid admin credentials");
+      return res.status(401).json({ 
+        success: false, 
+        error: "Invalid credentials" 
+      });
+    }
+
+    const user = userResult.recordset[0];
+    console.log("Admin User found:", user);
+
+    res.json({ 
+      success: true, 
+      message: "Login successful",
+      userType: "admin",
+      user: {
+        id: user.employee_id,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        email: user.email,
+        department: user.dept_name,
+        status: user.employment_status
+      }
+    });
+
+  } catch (error) {
+    console.error("Admin Login Error:", error);
     res.status(500).json({ 
       success: false, 
       error: error.message 
