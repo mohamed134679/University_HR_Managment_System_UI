@@ -11,11 +11,44 @@ const Login = () => {
   const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
   const [userType, setUserType] = useState<"employee" | "admin">("employee");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // No validation for now as requested
-    navigate("/");
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("http://127.0.0.1:5001/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          employeeId,
+          password,
+          userType,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Login failed");
+        setLoading(false);
+        return;
+      }
+
+      // Store user info in localStorage (or use context/state management)
+      localStorage.setItem("user", JSON.stringify(data.user));
+      navigate("/");
+    } catch (err) {
+      setError("Connection error. Make sure the backend is running on http://127.0.0.1:5001");
+      console.error("Login error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -95,6 +128,12 @@ const Login = () => {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleLogin} className="space-y-6">
+                {error && (
+                  <div className="p-3 bg-red-100 border border-red-300 rounded-lg text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
+                
                 {/* User Type Selection */}
                 <div className="flex gap-2 p-1 bg-muted rounded-lg">
                   <button
@@ -166,8 +205,9 @@ const Login = () => {
                   variant="login"
                   size="lg"
                   className="w-full h-12 text-base"
+                  disabled={loading}
                 >
-                  Sign In
+                  {loading ? "Signing In..." : "Sign In"}
                 </Button>
 
                 <p className="text-xs text-center text-muted-foreground pt-2">
