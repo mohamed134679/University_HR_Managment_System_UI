@@ -50,31 +50,49 @@ const LeavesApproval = ({ hrId }: LeavesApprovalProps) => {
 
   const handleApprove = async (requestId: number, leaveType: string) => {
     try {
-      // TODO: Implement backend endpoint for approving leaves
-      // const response = await fetch(`http://localhost:5001/api/hr/leaves/approve`, {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ requestId, hrId, leaveType }),
-      // });
-      console.log(`Approved ${leaveType} leave request ${requestId}`);
+      const endpoint = leaveType === 'annual' || leaveType === 'accidental'
+        ? 'annual-accidental'
+        : leaveType === 'unpaid'
+        ? 'unpaid'
+        : 'compensation';
+
+      const response = await fetch(`http://localhost:5001/api/hr/leaves/${endpoint}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, hrId }),
+      });
+      
+      if (!response.ok) throw new Error("Failed to approve leave");
+      
+      console.log(`Approved leave request ${requestId}`);
       fetchPendingLeaves();
     } catch (err) {
       setError("Failed to approve leave");
+      console.error(err);
     }
   };
 
   const handleReject = async (requestId: number, leaveType: string) => {
     try {
-      // TODO: Implement backend endpoint for rejecting leaves
-      // const response = await fetch(`http://localhost:5001/api/hr/leaves/reject`, {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ requestId, hrId, leaveType }),
-      // });
-      console.log(`Rejected ${leaveType} leave request ${requestId}`);
+      const endpoint = leaveType === 'annual' || leaveType === 'accidental'
+        ? 'annual-accidental'
+        : leaveType === 'unpaid'
+        ? 'unpaid'
+        : 'compensation';
+
+      const response = await fetch(`http://localhost:5001/api/hr/leaves/${endpoint}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, hrId }),
+      });
+      
+      if (!response.ok) throw new Error("Failed to reject leave");
+      
+      console.log(`Rejected leave request ${requestId}`);
       fetchPendingLeaves();
     } catch (err) {
       setError("Failed to reject leave");
+      console.error(err);
     }
   };
 

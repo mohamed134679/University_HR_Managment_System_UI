@@ -260,116 +260,10 @@ app.post("/api/login/admin", async (req, res) => {
 // HR OPERATIONS ENDPOINTS
 // ============================================
 
-// Get pending leaves for HR to approve
-app.get("/api/hr/leaves/pending", async (req, res) => {
+// Approve or reject annual/accidental leave
+app.post("/api/hr/leaves/annual-accidental/approve", async (req, res) => {
   try {
-    const { hrId } = req.query;
-    
-    if (!hrId) {
-      return res.status(400).json({ success: false, error: "HR ID required" });
-    }
-
-    const connection = await db.connectDB();
-    
-    // Query to get pending leaves
-    const result = await connection.request()
-      .input('hr_ID', parseInt(hrId))
-      .query(`
-        SELECT 
-          L.request_ID,
-          COALESCE(AL.emp_ID, ACC.emp_ID, ML.Emp_ID, UL.Emp_ID, CL.emp_ID) as employee_id,
-          E.first_name,
-          E.last_name,
-          L.start_date,
-          L.end_date,
-          L.num_days,
-          L.final_approval_status,
-          CASE 
-            WHEN AL.request_ID IS NOT NULL THEN 'annual'
-            WHEN ACC.request_ID IS NOT NULL THEN 'accidental'
-            WHEN ML.request_ID IS NOT NULL THEN 'medical'
-            WHEN UL.request_ID IS NOT NULL THEN 'unpaid'
-            WHEN CL.request_ID IS NOT NULL THEN 'compensation'
-          END as leave_type,
-          E.annual_balance,
-          E.accidental_balance
-        FROM Leave L
-        LEFT JOIN Annual_Leave AL ON L.request_ID = AL.request_ID
-        LEFT JOIN Accidental_Leave ACC ON L.request_ID = ACC.request_ID
-        LEFT JOIN Medical_Leave ML ON L.request_ID = ML.request_ID
-        LEFT JOIN Unpaid_Leave UL ON L.request_ID = UL.request_ID
-        LEFT JOIN Compensation_Leave CL ON L.request_ID = CL.request_ID
-        INNER JOIN Employee E ON COALESCE(AL.emp_ID, ACC.emp_ID, ML.Emp_ID, UL.Emp_ID, CL.emp_ID) = E.employee_id
-        INNER JOIN Employee_Approve_Leave EAL ON L.request_ID = EAL.leave_ID
-        WHERE L.final_approval_status = 'Pending'
-          AND EAL.Emp1_ID = @hr_ID
-      `);
-
-    res.json({
-      success: true,
-      leaves: result.recordset.map(row => ({
-        requestId: row.request_ID,
-        employeeId: row.employee_id,
-        employeeName: `${row.first_name} ${row.last_name}`,
-        leaveType: row.leave_type,
-        startDate: row.start_date,
-        endDate: row.end_date,
-        numDays: row.num_days,
-        status: row.final_approval_status,
-        employeeBalance: row.leave_type === 'annual' ? row.annual_balance : row.accidental_balance,
-      }))
-    });
-
-  } catch (error) {
-    console.error("Error fetching pending leaves:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Approve annual or accidental leave
-app.post("/api/hr/leaves/approve", async (req, res) => {
-  try {
-    const { requestId, hrId, leaveType } = req.body;
-
-    if (!requestId || !hrId || !leaveType) {
-      return res.status(400).json({ success: false, error: "Missing required fields" });
-    }
-
-    const connection = await db.connectDB();
-
-    // Call stored procedure based on leave type
-    const procedureName = leaveType === 'annual' || leaveType === 'accidental' 
-      ? 'HR_approval_an_acc'
-      : leaveType === 'unpaid'
-      ? 'HR_approval_unpaid'
-      : leaveType === 'compensation'
-      ? 'HR_approval_comp'
-      : null;
-
-    if (!procedureName) {
-      return res.status(400).json({ success: false, error: "Invalid leave type" });
-    }
-
-    await connection.request()
-      .input('request_ID', parseInt(requestId))
-      .input('HR_ID', parseInt(hrId))
-      .execute(procedureName);
-
-    res.json({
-      success: true,
-      message: `${leaveType} leave approved successfully`
-    });
-
-  } catch (error) {
-    console.error("Error approving leave:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Reject leave
-app.post("/api/hr/leaves/reject", async (req, res) => {
-  try {
-    const { requestId, hrId, leaveType } = req.body;
+    const { requestId, hrId } = req.body;
 
     if (!requestId || !hrId) {
       return res.status(400).json({ success: false, error: "Missing required fields" });
@@ -377,32 +271,72 @@ app.post("/api/hr/leaves/reject", async (req, res) => {
 
     const connection = await db.connectDB();
 
-    // Update leave status to rejected
     await connection.request()
       .input('request_ID', parseInt(requestId))
-      .query(`
-        UPDATE Leave
-        SET final_approval_status = 'Rejected'
-        WHERE request_ID = @request_ID
-      `);
-
-    // Update employee approval record
-    await connection.request()
-      .input('hr_ID', parseInt(hrId))
-      .input('leave_ID', parseInt(requestId))
-      .query(`
-        UPDATE Employee_Approve_Leave
-        SET status = 'Rejected'
-        WHERE Emp1_ID = @hr_ID AND leave_ID = @leave_ID
-      `);
+      .input('HR_ID', parseInt(hrId))
+      .execute('HR_approval_an_acc');
 
     res.json({
       success: true,
-      message: "Leave rejected successfully"
+      message: "Annual/Accidental leave processed successfully"
     });
 
   } catch (error) {
-    console.error("Error rejecting leave:", error);
+    console.error("Error processing annual/accidental leave:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Approve or reject unpaid leave
+app.post("/api/hr/leaves/unpaid/approve", async (req, res) => {
+  try {
+    const { requestId, hrId } = req.body;
+
+    if (!requestId || !hrId) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
+    }
+
+    const connection = await db.connectDB();
+
+    await connection.request()
+      .input('request_ID', parseInt(requestId))
+      .input('HR_ID', parseInt(hrId))
+      .execute('HR_approval_unpaid');
+
+    res.json({
+      success: true,
+      message: "Unpaid leave processed successfully"
+    });
+
+  } catch (error) {
+    console.error("Error processing unpaid leave:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Approve or reject compensation leave
+app.post("/api/hr/leaves/compensation/approve", async (req, res) => {
+  try {
+    const { requestId, hrId } = req.body;
+
+    if (!requestId || !hrId) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
+    }
+
+    const connection = await db.connectDB();
+
+    await connection.request()
+      .input('request_ID', parseInt(requestId))
+      .input('HR_ID', parseInt(hrId))
+      .execute('HR_approval_comp');
+
+    res.json({
+      success: true,
+      message: "Compensation leave processed successfully"
+    });
+
+  } catch (error) {
+    console.error("Error processing compensation leave:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
