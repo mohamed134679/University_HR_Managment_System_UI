@@ -606,47 +606,86 @@ app.post("/api/hr/deductions/missing-days", async (req, res) => {
 // Generate monthly payroll
 app.post("/api/hr/payroll/generate", async (req, res) => {
   try {
-    const { month, hrId } = req.body;
+    const { employeeId, fromDate, toDate } = req.body;
 
-    if (!month) {
-      return res.status(400).json({ success: false, error: "Month required" });
+    if (!employeeId || !fromDate || !toDate) {
+      return res.status(400).json({ success: false, error: "Employee ID, from date, and to date are required" });
     }
 
     const connection = await db.connectDB();
 
-    // Parse month YYYY-MM format
-    const [year, monthNum] = month.split('-');
-
-    // Get all employees and their salary data
-    const result = await connection.request()
+    // Check if payroll already exists for this employee in this period
+    const existingPayroll = await connection.request()
+      .input('employee_ID', parseInt(employeeId))
+      .input('from_date', fromDate)
+      .input('to_date', toDate)
       .query(`
-        SELECT 
-          E.employee_id,
-          E.first_name,
-          E.last_name,
-          E.salary as base_salary,
-          ISNULL(dbo.Bonus_amount(E.employee_id), 0) as bonus,
-          (SELECT ISNULL(SUM(amount), 0) FROM Deduction 
-           WHERE emp_ID = E.employee_id 
-           AND MONTH(date) = ${monthNum} 
-           AND YEAR(date) = ${year}) as deductions
-        FROM Employee E
-        WHERE E.employment_status != 'resigned'
+        SELECT 1 
+        FROM Payroll 
+        WHERE emp_ID = @employee_ID 
+        AND from_date = @from_date 
+        AND to_date = @to_date
       `);
 
-    const payrollRecords = result.recordset.map(row => ({
-      employeeId: row.employee_id,
-      employeeName: `${row.first_name} ${row.last_name}`,
-      baseSalary: row.base_salary || 0,
-      bonus: row.bonus || 0,
-      deductions: row.deductions || 0,
-      finalSalary: (row.base_salary || 0) + (row.bonus || 0) - (row.deductions || 0),
-      status: 'generated'
-    }));
+    if (existingPayroll.recordset && existingPayroll.recordset.length > 0) {
+      return res.json({
+        success: true,
+        message: "Payroll for this employee in that period already exists"
+      });
+    }
+
+    // Call Add_Payroll stored procedure
+    await connection.request()
+      .input('employee_ID', parseInt(employeeId))
+      .input('from', fromDate)
+      .input('to', toDate)
+      .execute('Add_Payroll');
+
+    // Get the payroll record that was just added
+    const payrollResult = await connection.request()
+      .input('employee_ID', parseInt(employeeId))
+      .query(`
+        SELECT TOP 1 
+          P.ID,
+          P.payment_date,
+          P.final_salary_amount,
+          P.from_date,
+          P.to_date,
+          P.comments,
+          P.bonus_amount,
+          P.deductions_amount,
+          P.emp_ID,
+          E.first_name,
+          E.last_name,
+          E.salary as base_salary
+        FROM Payroll P
+        INNER JOIN Employee E ON P.emp_ID = E.employee_ID
+        WHERE P.emp_ID = @employee_ID
+        ORDER BY P.payment_date DESC
+      `);
+
+    if (!payrollResult.recordset || payrollResult.recordset.length === 0) {
+      return res.status(404).json({ success: false, error: "Payroll record not found" });
+    }
+
+    const payroll = payrollResult.recordset[0];
 
     res.json({
       success: true,
-      records: payrollRecords
+      message: "Payroll added successfully",
+      payroll: {
+        payrollId: payroll.ID,
+        employeeId: payroll.emp_ID,
+        employeeName: `${payroll.first_name} ${payroll.last_name}`,
+        baseSalary: payroll.base_salary,
+        bonusAmount: payroll.bonus_amount,
+        deductionsAmount: payroll.deductions_amount,
+        finalSalary: payroll.final_salary_amount,
+        fromDate: payroll.from_date,
+        toDate: payroll.to_date,
+        paymentDate: payroll.payment_date,
+        comments: payroll.comments
+      }
     });
 
   } catch (error) {
