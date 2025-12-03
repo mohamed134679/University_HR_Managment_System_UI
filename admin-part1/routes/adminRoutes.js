@@ -1,20 +1,8 @@
-const express = require('express');
-const router = express.Router();
-const { poolPromise, sql } = require('../db');
 
-// 1. Admin Login
-router.post('/login', async (req, res) => {
-    const { adminId, password } = req.body;
-    
-    if (adminId === "admin" && password === "admin123") {
-        res.json({ success: true, message: "Login successful" });
-    } else {
-        res.status(401).json({ success: false, message: "Invalid credentials" });
-    }
-});
+
 
 // 2. Get All Employees
-router.get('/employees', async (req, res) => {
+app.get('/employees', async (req, res) => {
     try {
         const pool = await poolPromise;
         const result = await pool.request().query('SELECT * FROM allEmployeeProfiles');
@@ -25,7 +13,7 @@ router.get('/employees', async (req, res) => {
 });
 
 // 3. Employees Per Department
-router.get('/employees-per-dept', async (req, res) => {
+app.get('/employees-per-dept', async (req, res) => {
     try {
         const pool = await poolPromise;
         const result = await pool.request().query('SELECT * FROM NoEmployeeDept');
@@ -36,7 +24,7 @@ router.get('/employees-per-dept', async (req, res) => {
 });
 
 // 4. Rejected Medical Leaves
-router.get('/rejected-medical-leaves', async (req, res) => {
+app.get('/rejected-medical-leaves', async (req, res) => {
     try {
         const pool = await poolPromise;
         const result = await pool.request().query('SELECT * FROM allRejectedMedicals');
@@ -47,18 +35,9 @@ router.get('/rejected-medical-leaves', async (req, res) => {
 });
 
 // Health check - verify DB connection and basic query
-router.get('/health', async (req, res) => {
-    try {
-        const pool = await poolPromise;
-        const result = await pool.request().query("SELECT 1 AS ping, @@VERSION AS version");
-        res.json({ connected: true, serverVersion: result.recordset[0].version });
-    } catch (err) {
-        res.status(500).json({ connected: false, error: err.message });
-    }
-});
 
 // 5. Remove Resigned Employee Deductions
-router.post('/remove-resigned-deductions', async (req, res) => {
+app.post('/remove-resigned-deductions', async (req, res) => {
     try {
         const pool = await poolPromise;
         await pool.request().query('EXEC Remove_Deductions');
@@ -69,7 +48,7 @@ router.post('/remove-resigned-deductions', async (req, res) => {
 });
 
 // 6. Update Attendance
-router.post('/update-attendance', async (req, res) => {
+app.post('/update-attendance', async (req, res) => {
     const { employeeId, checkIn, checkOut } = req.body;
     try {
         const pool = await poolPromise;
@@ -85,7 +64,7 @@ router.post('/update-attendance', async (req, res) => {
 });
 
 // 7. Add Holiday
-router.post('/add-holiday', async (req, res) => {
+app.post('/add-holiday', async (req, res) => {
     const { holidayName, fromDate, toDate } = req.body;
     try {
         const pool = await poolPromise;
@@ -101,7 +80,7 @@ router.post('/add-holiday', async (req, res) => {
 });
 
 // 8. Initiate Attendance
-router.post('/initiate-attendance', async (req, res) => {
+app.post('/initiate-attendance', async (req, res) => {
     try {
         const pool = await poolPromise;
         await pool.request().query('EXEC Initiate_Attendance');
@@ -111,4 +90,4 @@ router.post('/initiate-attendance', async (req, res) => {
     }
 });
 
-module.exports = router;
+module.exports = app;
