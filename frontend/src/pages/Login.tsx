@@ -19,10 +19,17 @@ const Login = () => {
     setLoading(true);
     setError("");
 
+    console.log("=== LOGIN ATTEMPT ===");
+    console.log("Employee ID:", employeeId);
+    console.log("User Type:", userType);
+    console.log("Password length:", password.length);
+
     try {
       // Determine endpoint based on user type
       const endpoint = `http://localhost:5001/api/login/${userType}`;
       
+      console.log("Calling endpoint:", endpoint);
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -34,9 +41,13 @@ const Login = () => {
         }),
       });
 
+      console.log("Response status:", response.status);
+
       const data = await response.json();
+      console.log("Response data:", data);
 
       if (!response.ok) {
+        console.log("Login failed:", data.error);
         setError(data.error || "Login failed");
         setLoading(false);
         return;
@@ -44,17 +55,25 @@ const Login = () => {
 
       // Store user info in localStorage (or use context/state management)
       const userData = { ...data.user, userType: data.userType };
+      console.log("Storing user data:", userData);
       localStorage.setItem("user", JSON.stringify(userData));
       
+      console.log("Navigating to dashboard for userType:", data.userType);
+
       // Route based on user type
       if (data.userType === "hr") {
-        navigate("/hr/dashboard");
+        console.log("Redirecting to HR dashboard");
+        navigate("/hr/dashboard", { replace: true });
+      } else if (data.userType === "admin") {
+        console.log("Redirecting to ADMIN dashboard");
+        navigate("/admin/dashboard", { replace: true });
       } else {
-        navigate("/");
+        console.log("Redirecting to home");
+        navigate("/", { replace: true });
       }
     } catch (err) {
+      console.error("=== LOGIN ERROR ===", err);
       setError("Connection error. Make sure the backend is running on http://localhost:5001");
-      console.error("Login error:", err);
     } finally {
       setLoading(false);
     }

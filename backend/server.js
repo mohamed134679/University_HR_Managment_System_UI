@@ -694,95 +694,109 @@ app.post("/api/hr/payroll/generate", async (req, res) => {
   }
 });
 
-
-
+// ============================================
+// ADMIN OPERATIONS ENDPOINTS
+// ============================================
 
 // 2. Get All Employees
-app.get('/employees', async (req, res) => {
+app.get('/api/admin/employees', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().query('SELECT * FROM allEmployeeProfiles');
-        res.json(result.recordset);
+        const connection = await db.connectDB();
+        const result = await connection.request().query('SELECT * FROM allEmployeeProfiles');
+        res.json({ employees: result.recordset });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // 3. Employees Per Department
-app.get('/employees-per-dept', async (req, res) => {
+app.get('/api/admin/departments', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().query('SELECT * FROM NoEmployeeDept');
-        res.json(result.recordset);
+        const connection = await db.connectDB();
+        const result = await connection.request().query('SELECT * FROM NoEmployeeDept');
+        res.json({ departments: result.recordset });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // 4. Rejected Medical Leaves
-app.get('/rejected-medical-leaves', async (req, res) => {
+app.get('/api/admin/rejected-medicals', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        const result = await pool.request().query('SELECT * FROM allRejectedMedicals');
-        res.json(result.recordset);
+        const connection = await db.connectDB();
+        const result = await connection.request().query('SELECT * FROM allRejectedMedicals');
+        res.json({ rejectedRequests: result.recordset });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Health check - verify DB connection and basic query
-
 // 5. Remove Resigned Employee Deductions
-app.post('/remove-resigned-deductions', async (req, res) => {
+app.post('/api/admin/remove-resigned-deductions', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        await pool.request().query('EXEC Remove_Deductions');
-        res.json({ message: "Deductions for resigned employees removed successfully" });
+        const connection = await db.connectDB();
+        await connection.request().query('EXEC Remove_Deductions');
+        res.json({ success: true, message: "Deductions for resigned employees removed successfully" });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // 6. Update Attendance
-app.post('/update-attendance', async (req, res) => {
+app.post('/api/admin/update-attendance', async (req, res) => {
     const { employeeId, checkIn, checkOut } = req.body;
     try {
-        const pool = await poolPromise;
-        await pool.request()
-            .input('Employee_id', sql.Int, employeeId)
-            .input('check_in_time', sql.Time, checkIn)
-            .input('check_out_time', sql.Time, checkOut)
-            .query('EXEC Update_Attendance @Employee_id, @check_in_time, @check_out_time');
-        res.json({ message: "Attendance updated successfully" });
+        if (!employeeId || !checkIn || !checkOut) {
+            return res.status(400).json({ success: false, error: "Employee ID, check-in and check-out times are required" });
+        }
+
+        const connection = await db.connectDB();
+        const sql = await import('mssql');
+        
+        // Format times as HH:MM:SS if they're in HH:MM format
+        const formatTime = (time) => {
+            if (time.length === 5) { // HH:MM format
+                return `${time}:00`; // Convert to HH:MM:SS
+            }
+            return time;
+        };
+
+        await connection.request()
+            .input('Employee_id', sql.default.Int, parseInt(employeeId))
+            .input('check_in_time', sql.default.VarChar(8), formatTime(checkIn))
+            .input('check_out_time', sql.default.VarChar(8), formatTime(checkOut))
+            .execute('Update_Attendance');
+        res.json({ success: true, message: "Attendance updated successfully" });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // 7. Add Holiday
-app.post('/add-holiday', async (req, res) => {
+app.post('/api/admin/add-holiday', async (req, res) => {
     const { holidayName, fromDate, toDate } = req.body;
     try {
-        const pool = await poolPromise;
-        await pool.request()
-            .input('holiday_name', sql.VarChar(50), holidayName)
-            .input('from_date', sql.Date, fromDate)
-            .input('to_date', sql.Date, toDate)
-            .query('EXEC Add_Holiday @holiday_name, @from_date, @to_date');
-        res.json({ message: "Holiday added successfully" });
+        const connection = await db.connectDB();
+        const sql = await import('mssql');
+        await connection.request()
+            .input('holiday_name', sql.default.VarChar(50), holidayName)
+            .input('from_date', sql.default.Date, fromDate)
+            .input('to_date', sql.default.Date, toDate)
+            .execute('Add_Holiday');
+        res.json({ success: true, message: "Holiday added successfully" });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 // 8. Initiate Attendance
-app.post('/initiate-attendance', async (req, res) => {
+app.post('/api/admin/initiate-attendance', async (req, res) => {
     try {
-        const pool = await poolPromise;
-        await pool.request().query('EXEC Initiate_Attendance');
-        res.json({ message: "Attendance initiated for all employees" });
+        const connection = await db.connectDB();
+        await connection.request().execute('Initiate_Attendance');
+        res.json({ success: true, message: "Attendance initiated for all employees" });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
