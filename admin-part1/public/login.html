@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en"> <!-- Specify the language here -->
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Login</title>
+    <style>
+        body { font-family: Arial; max-width: 400px; margin: 100px auto; padding: 20px; }
+        .login-form { background: #f9f9f9; padding: 30px; border-radius: 8px; }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #message { margin-top: 15px; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .sr-only {
+            position: absolute;
+            width: 1px; height: 1px;
+            padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0,0,0,0);
+            white-space: nowrap; border: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-form">
+        <h2>🔐 Admin Login</h2>
+        <form id="loginForm">
+            <label for="adminId" class="sr-only">Admin ID</label>
+            <input type="text" id="adminId" placeholder="Admin ID" value="admin" required title="Admin ID">
+
+            <label for="password" class="sr-only">Password</label>
+            <input type="password" id="password" placeholder="Password" value="admin123" required title="Password">
+
+            <button type="submit">Login</button>
+        </form>
+        <div id="message"></div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const messageDiv = document.getElementById('message');
+            
+            try {
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        adminId: document.getElementById('adminId').value,
+                        password: document.getElementById('password').value
+                    })
+                });
+                
+                const result = await response.json();
+                
+                messageDiv.textContent = result.message;
+                messageDiv.className = result.success ? 'success' : 'error';
+                
+                if (result.success) {
+                    localStorage.setItem('adminToken', 'loggedin');
+                    setTimeout(() => window.location.href = 'dashboard.html', 1000);
+                }
+            } catch (error) {
+                messageDiv.textContent = 'Connection error: ' + error.message;
+                messageDiv.className = 'error';
+            }
+        });
+    </script>
+</body>
+</html>

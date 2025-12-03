@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rejected Medical Leaves</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Rejected Medical Leaves</h1>
+            <a href="dashboard.html">← Back to Dashboard</a>
+        </header>
+
+        <div id="results"></div>
+    </div>
+    <script src="results.js" defer></script>
+    <script defer>
+        (async function() {
+            if (!localStorage.getItem('adminToken')) {
+                window.location.href = 'login.html';
+                return;
+            }
+            try {
+                const data = await apiCall('/api/admin/rejected-medical-leaves');
+                displayResults(data, 'Rejected Medical Leaves');
+            } catch (e) { console.error(e); }
+        })();
+    </script>
+</body>
+</html>
