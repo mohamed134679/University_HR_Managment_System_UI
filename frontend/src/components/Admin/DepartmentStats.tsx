@@ -4,10 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertCircle } from "lucide-react";
 
 interface Department {
-  dept_ID: number;
-  name: string;
-  manager_ID: number | null;
-  manager_name: string | null;
+  Department: string;
+  "Number of Employees": number;
 }
 
 const DepartmentStats = () => {
@@ -63,34 +61,30 @@ const DepartmentStats = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Departments</CardTitle>
-        <CardDescription>View all departments and their managers</CardDescription>
+        <CardTitle>Department Statistics</CardTitle>
+        <CardDescription>Number of employees per department</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Department ID</TableHead>
                 <TableHead>Department Name</TableHead>
-                <TableHead>Manager ID</TableHead>
-                <TableHead>Manager Name</TableHead>
+                <TableHead className="text-right">Number of Employees</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {departments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  <TableCell colSpan={2} className="text-center text-muted-foreground">
                     No departments found
                   </TableCell>
                 </TableRow>
               ) : (
                 departments.map((dept) => (
-                  <TableRow key={dept.dept_ID}>
-                    <TableCell className="font-medium">{dept.dept_ID}</TableCell>
-                    <TableCell>{dept.name}</TableCell>
-                    <TableCell>{dept.manager_ID || "N/A"}</TableCell>
-                    <TableCell>{dept.manager_name || "No Manager"}</TableCell>
+                  <TableRow key={dept.Department}>
+                    <TableCell className="font-medium">{dept.Department || 'N/A'}</TableCell>
+                    <TableCell className="text-right">{dept["Number of Employees"] ?? 'N/A'}</TableCell>
                   </TableRow>
                 ))
               )}

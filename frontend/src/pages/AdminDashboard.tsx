@@ -7,6 +7,8 @@ import EmployeesList from "@/components/Admin/EmployeesList";
 import DepartmentStats from "@/components/Admin/DepartmentStats";
 import RejectedMedicals from "@/components/Admin/RejectedMedicals";
 import AdminActions from "@/components/Admin/AdminActions";
+import AttendanceYesterday from "@/components/Admin/AttendanceYesterday";
+import PerformanceWinter from "@/components/Admin/PerformanceWinter";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -71,10 +73,12 @@ const AdminDashboard = () => {
 
       <div className="container mx-auto px-4 py-6">
         <Tabs defaultValue="employees" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="employees">Employees</TabsTrigger>
             <TabsTrigger value="departments">Departments</TabsTrigger>
             <TabsTrigger value="medical">Medical Leaves</TabsTrigger>
+            <TabsTrigger value="attendance">Attendance</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
             <TabsTrigger value="actions">Admin Actions</TabsTrigger>
           </TabsList>
 
@@ -88,6 +92,14 @@ const AdminDashboard = () => {
 
           <TabsContent value="medical" className="space-y-6">
             <RejectedMedicals />
+          </TabsContent>
+
+          <TabsContent value="attendance" className="space-y-6">
+            <AttendanceYesterday />
+          </TabsContent>
+
+          <TabsContent value="performance" className="space-y-6">
+            <PerformanceWinter />
           </TabsContent>
 
           <TabsContent value="actions" className="space-y-6">

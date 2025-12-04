@@ -158,21 +158,21 @@ const PayrollGeneration = ({ hrId }: PayrollGenerationProps) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Payroll ID</p>
-                  <p className="font-medium">{payrollData.payrollId}</p>
+                  <p className="font-medium">{payrollData.payrollId ?? 'N/A'}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Employee</p>
-                  <p className="font-medium">{payrollData.employeeName} (ID: {payrollData.employeeId})</p>
+                  <p className="font-medium">{payrollData.employeeName || 'N/A'} (ID: {payrollData.employeeId ?? 'N/A'})</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Period</p>
                   <p className="font-medium">
-                    {new Date(payrollData.fromDate).toLocaleDateString()} - {new Date(payrollData.toDate).toLocaleDateString()}
+                    {payrollData.fromDate ? new Date(payrollData.fromDate).toLocaleDateString() : 'N/A'} - {payrollData.toDate ? new Date(payrollData.toDate).toLocaleDateString() : 'N/A'}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Payment Date</p>
-                  <p className="font-medium">{new Date(payrollData.paymentDate).toLocaleDateString()}</p>
+                  <p className="font-medium">{payrollData.paymentDate ? new Date(payrollData.paymentDate).toLocaleDateString() : 'N/A'}</p>
                 </div>
               </div>
 
@@ -181,19 +181,19 @@ const PayrollGeneration = ({ hrId }: PayrollGenerationProps) => {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Base Salary</span>
-                    <span className="font-medium">${payrollData.baseSalary.toFixed(2)}</span>
+                    <span className="font-medium">{payrollData.baseSalary != null ? `$${payrollData.baseSalary.toFixed(2)}` : 'N/A'}</span>
                   </div>
                   <div className="flex justify-between text-green-600 dark:text-green-400">
                     <span>Bonus</span>
-                    <span className="font-medium">+${payrollData.bonusAmount.toFixed(2)}</span>
+                    <span className="font-medium">{payrollData.bonusAmount != null ? `+$${payrollData.bonusAmount.toFixed(2)}` : 'N/A'}</span>
                   </div>
                   <div className="flex justify-between text-red-600 dark:text-red-400">
                     <span>Deductions</span>
-                    <span className="font-medium">-${payrollData.deductionsAmount.toFixed(2)}</span>
+                    <span className="font-medium">{payrollData.deductionsAmount != null ? `-$${payrollData.deductionsAmount.toFixed(2)}` : 'N/A'}</span>
                   </div>
                   <div className="border-t pt-2 flex justify-between text-lg font-bold">
                     <span>Final Salary</span>
-                    <span>${payrollData.finalSalary.toFixed(2)}</span>
+                    <span>{payrollData.finalSalary != null ? `$${payrollData.finalSalary.toFixed(2)}` : 'N/A'}</span>
                   </div>
                 </div>
               </div>
@@ -201,7 +201,7 @@ const PayrollGeneration = ({ hrId }: PayrollGenerationProps) => {
               {payrollData.comments && payrollData.comments !== 'None' && (
                 <div className="border-t pt-4">
                   <p className="text-sm text-muted-foreground">Comments</p>
-                  <p className="font-medium">{payrollData.comments}</p>
+                  <p className="font-medium">{payrollData.comments || 'N/A'}</p>
                 </div>
               )}
             </div>

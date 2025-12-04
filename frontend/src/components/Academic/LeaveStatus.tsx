@@ -51,11 +51,11 @@ const LeaveStatus = ({ user }: Props) => {
           <tbody>
             {leaves.map((leave, idx) => (
               <tr key={idx} className="border-t">
-                <td className="px-2 py-1 capitalize">{leave.leave_type}</td>
-                <td className="px-2 py-1">{leave.from_date}</td>
-                <td className="px-2 py-1">{leave.to_date}</td>
-                <td className="px-2 py-1">{leave.reason}</td>
-                <td className="px-2 py-1">{leave.status}</td>
+                <td className="px-2 py-1 capitalize">{leave.leave_type || 'N/A'}</td>
+                <td className="px-2 py-1">{leave.from_date || 'N/A'}</td>
+                <td className="px-2 py-1">{leave.to_date || 'N/A'}</td>
+                <td className="px-2 py-1">{leave.reason || 'N/A'}</td>
+                <td className="px-2 py-1">{leave.status || 'N/A'}</td>
               </tr>
             ))}
           </tbody>

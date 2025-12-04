@@ -50,10 +50,10 @@ const Attendance = ({ user }: Props) => {
           <tbody>
             {attendance.map((record, idx) => (
               <tr key={idx} className="border-t">
-                <td className="px-2 py-1">{record.date}</td>
-                <td className="px-2 py-1">{record.checkIn}</td>
-                <td className="px-2 py-1">{record.checkOut}</td>
-                <td className="px-2 py-1">{record.status}</td>
+                <td className="px-2 py-1">{record.date || 'N/A'}</td>
+                <td className="px-2 py-1">{record.checkIn || 'N/A'}</td>
+                <td className="px-2 py-1">{record.checkOut || 'N/A'}</td>
+                <td className="px-2 py-1">{record.status || 'N/A'}</td>
               </tr>
             ))}
           </tbody>

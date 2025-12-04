@@ -56,10 +56,10 @@ const Performance = ({ user }: Props) => {
       {performance && (
         <div className="mt-4 border rounded p-4 bg-card">
           {/* Adjust these fields based on your backend response */}
-          <p><span className="font-medium">Semester:</span> {performance.semester}</p>
-          <p><span className="font-medium">Courses:</span> {performance.courses}</p>
-          <p><span className="font-medium">Rating:</span> {performance.rating}</p>
-          <p><span className="font-medium">Remarks:</span> {performance.remarks}</p>
+          <p><span className="font-medium">Semester:</span> {performance.semester || 'N/A'}</p>
+          <p><span className="font-medium">Courses:</span> {performance.courses || 'N/A'}</p>
+          <p><span className="font-medium">Rating:</span> {performance.rating ?? 'N/A'}</p>
+          <p><span className="font-medium">Remarks:</span> {performance.remarks || 'N/A'}</p>
         </div>
       )}
       {!performance && !loading && !error && (

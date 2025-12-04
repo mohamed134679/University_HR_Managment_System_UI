@@ -71,9 +71,9 @@ const Deductions = ({ user }: Props) => {
           <tbody>
             {deductions.map((ded, idx) => (
               <tr key={idx} className="border-t">
-                <td className="px-2 py-1">{ded.date}</td>
-                <td className="px-2 py-1">{ded.amount}</td>
-                <td className="px-2 py-1">{ded.reason}</td>
+                <td className="px-2 py-1">{ded.date || 'N/A'}</td>
+                <td className="px-2 py-1">{ded.amount ?? 'N/A'}</td>
+                <td className="px-2 py-1">{ded.reason || 'N/A'}</td>
               </tr>
             ))}
           </tbody>

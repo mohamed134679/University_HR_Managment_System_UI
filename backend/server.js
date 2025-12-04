@@ -203,26 +203,12 @@ app.post("/api/login/admin", async (req, res) => {
       });
     }
 
-    const connection = await db.connectDB();
-    console.log("Database connected");
-    
-    // Check if employee exists with correct password
-    const userResult = await connection.request()
-      .input('employee_ID', employeeId)
-      .input('password', password)
-      .query(`
-        SELECT 
-          employee_id, 
-          first_name, 
-          last_name, 
-          email, 
-          dept_name,
-          employment_status
-        FROM Employee 
-        WHERE employee_id = @employee_ID AND password = @password
-      `);
+    // Hardcoded admin credentials
+    const ADMIN_ID = "admin";
+    const ADMIN_PASSWORD = "admin123";
 
-    if (!userResult.recordset || userResult.recordset.length === 0) {
+    // Check hardcoded credentials
+    if (employeeId !== ADMIN_ID || password !== ADMIN_PASSWORD) {
       console.log("Invalid admin credentials");
       return res.status(401).json({ 
         success: false, 
@@ -230,20 +216,19 @@ app.post("/api/login/admin", async (req, res) => {
       });
     }
 
-    const user = userResult.recordset[0];
-    console.log("Admin User found:", user);
+    console.log("Admin login successful");
 
     res.json({ 
       success: true, 
       message: "Login successful",
       userType: "admin",
       user: {
-        id: user.employee_id,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        email: user.email,
-        department: user.dept_name,
-        status: user.employment_status
+        id: 0,
+        firstName: "Admin",
+        lastName: "User",
+        email: "admin@guc.edu.eg",
+        department: "Administration",
+        status: "active"
       }
     });
 
@@ -732,7 +717,7 @@ app.get('/api/admin/rejected-medicals', async (req, res) => {
 });
 
 // 5. Remove Resigned Employee Deductions
-app.post('/api/admin/remove-resigned-deductions', async (req, res) => {
+app.delete('/api/admin/remove-resigned-deductions', async (req, res) => {
     try {
         const connection = await db.connectDB();
         await connection.request().query('EXEC Remove_Deductions');
@@ -746,8 +731,19 @@ app.post('/api/admin/remove-resigned-deductions', async (req, res) => {
 app.post('/api/admin/update-attendance', async (req, res) => {
     const { employeeId, checkIn, checkOut } = req.body;
     try {
-        if (!employeeId || !checkIn || !checkOut) {
-            return res.status(400).json({ success: false, error: "Employee ID, check-in and check-out times are required" });
+        if (!employeeId) {
+            return res.status(400).json({ success: false, error: "Employee ID is required" });
+        }
+
+        // Validate: either both checkIn and checkOut are provided, or neither
+        const hasCheckIn = checkIn && checkIn.trim() !== '';
+        const hasCheckOut = checkOut && checkOut.trim() !== '';
+        
+        if (hasCheckIn !== hasCheckOut) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Both check-in and check-out times must be provided together, or leave both empty to mark absent" 
+            });
         }
 
         const connection = await db.connectDB();
@@ -755,18 +751,26 @@ app.post('/api/admin/update-attendance', async (req, res) => {
         
         // Format times as HH:MM:SS if they're in HH:MM format
         const formatTime = (time) => {
+            if (!time || time.trim() === '') return null;
             if (time.length === 5) { // HH:MM format
                 return `${time}:00`; // Convert to HH:MM:SS
             }
             return time;
         };
 
+        const formattedCheckIn = formatTime(checkIn);
+        const formattedCheckOut = formatTime(checkOut);
+
         await connection.request()
-            .input('Employee_id', sql.default.Int, parseInt(employeeId))
-            .input('check_in_time', sql.default.VarChar(8), formatTime(checkIn))
-            .input('check_out_time', sql.default.VarChar(8), formatTime(checkOut))
+            .input('Employee_id',parseInt(employeeId))
+            .input('check_in_time', formattedCheckIn)
+            .input('check_out_time', formattedCheckOut)
             .execute('Update_Attendance');
-        res.json({ success: true, message: "Attendance updated successfully" });
+        
+        const message = formattedCheckIn && formattedCheckOut 
+            ? "Attendance updated successfully" 
+            : "Employee marked as absent successfully";
+        res.json({ success: true, message });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -776,8 +780,24 @@ app.post('/api/admin/update-attendance', async (req, res) => {
 app.post('/api/admin/add-holiday', async (req, res) => {
     const { holidayName, fromDate, toDate } = req.body;
     try {
+        // Validate that fromDate is not after toDate
+        const from = new Date(fromDate);
+        const to = new Date(toDate);
+        
+        if (from > to) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "From date can't be after the to date" 
+            });
+        }
+
         const connection = await db.connectDB();
         const sql = await import('mssql');
+        
+        // First, ensure the Holiday table exists by running Create_Holiday
+        await connection.request().execute('Create_Holiday');
+        
+        // Then add the holiday
         await connection.request()
             .input('holiday_name', sql.default.VarChar(50), holidayName)
             .input('from_date', sql.default.Date, fromDate)
@@ -836,13 +856,45 @@ app.get('/api/admin/performance-winter', async (req, res) => {
 
 
 // 3. Remove attendance records for all employees during official holidays
-app.post('/api/admin/remove-holiday-attendance', async (req, res) => {
+app.delete('/api/admin/remove-holiday-attendance', async (req, res) => {
   try {
       const connection = await db.connectDB();
+      await connection.request().execute('Create_Holiday');
+      
+      // Check how many records exist before deletion
+      const beforeCount = await connection.request().query(`
+        SELECT COUNT(*) as count 
+        FROM Attendance a
+        WHERE EXISTS (
+          SELECT 1 FROM Holiday h
+          WHERE a.date BETWEEN h.from_date AND h.to_date
+        )
+      `);
+      
       await connection.request().query('EXEC Remove_Holiday');
+      
+      // Check how many records exist after deletion
+      const afterCount = await connection.request().query(`
+        SELECT COUNT(*) as count 
+        FROM Attendance a
+        WHERE EXISTS (
+          SELECT 1 FROM Holiday h
+          WHERE a.date BETWEEN h.from_date AND h.to_date
+        )
+      `);
+      
+      const removedCount = beforeCount.recordset[0].count - afterCount.recordset[0].count;
+      
+      if (removedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          error: "No attendance records found during official holidays"
+        });
+      }
+      
       res.json({
           success: true,
-          message: "Attendance records during official holidays removed successfully"
+          message: `${removedCount} attendance record(s) during official holidays removed successfully`
       });
   } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -850,7 +902,7 @@ app.post('/api/admin/remove-holiday-attendance', async (req, res) => {
 });
 
 // 4. Remove unattended dayoff for an employee in the current month
-app.post('/api/admin/remove-dayoff', async (req, res) => {
+app.delete('/api/admin/remove-dayoff', async (req, res) => {
   const { employeeId } = req.body;
 
   if (!employeeId) {
@@ -863,14 +915,63 @@ app.post('/api/admin/remove-dayoff', async (req, res) => {
   try {
       const connection = await db.connectDB();
       const sql = await import('mssql');
+      
+      // Check if employee exists
+      const employeeCheck = await connection.request()
+          .input('employee_ID', sql.default.Int, parseInt(employeeId))
+          .query('SELECT 1 FROM Employee WHERE employee_ID = @employee_ID');
+      
+      if (!employeeCheck.recordset || employeeCheck.recordset.length === 0) {
+          return res.status(404).json({
+              success: false,
+              error: `Employee ${employeeId} not found`
+          });
+      }
+      
+      // Check how many unattended dayoff records exist before deletion
+      const beforeCount = await connection.request()
+          .input('employee_ID', sql.default.Int, parseInt(employeeId))
+          .query(`
+            SELECT COUNT(*) as count 
+            FROM Attendance a
+            JOIN Employee e ON a.emp_ID = e.employee_ID
+            WHERE a.emp_ID = @employee_ID
+            AND MONTH(a.date) = MONTH(GETDATE())
+            AND YEAR(a.date) = YEAR(GETDATE())
+            AND UPPER(DATENAME(WEEKDAY, a.[date])) = UPPER(e.official_day_off)
+            AND a.status = 'Absent'
+          `);
 
       await connection.request()
           .input('Employee_id', sql.default.Int, parseInt(employeeId))
           .execute('Remove_DayOff');
+      
+      // Check how many records exist after deletion
+      const afterCount = await connection.request()
+          .input('employee_ID', sql.default.Int, parseInt(employeeId))
+          .query(`
+            SELECT COUNT(*) as count 
+            FROM Attendance a
+            JOIN Employee e ON a.emp_ID = e.employee_ID
+            WHERE a.emp_ID = @employee_ID
+            AND MONTH(a.date) = MONTH(GETDATE())
+            AND YEAR(a.date) = YEAR(GETDATE())
+            AND UPPER(DATENAME(WEEKDAY, a.[date])) = UPPER(e.official_day_off)
+            AND a.status = 'Absent'
+          `);
+      
+      const removedCount = beforeCount.recordset[0].count - afterCount.recordset[0].count;
+      
+      if (removedCount === 0) {
+          return res.status(404).json({
+              success: false,
+              error: `No unattended dayoff records found for employee ${employeeId} in the current month`
+          });
+      }
 
       res.json({
           success: true,
-          message: `Unattended dayoff records removed successfully for employee ${employeeId}`
+          message: `${removedCount} unattended dayoff record(s) removed successfully for employee ${employeeId}`
       });
   } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -878,7 +979,7 @@ app.post('/api/admin/remove-dayoff', async (req, res) => {
 });
 
 // 5. Remove approved leaves for a certain employee from attendance records
-app.post('/api/admin/remove-approved-leaves', async (req, res) => {
+app.delete('/api/admin/remove-approved-leaves', async (req, res) => {
   const { employeeId } = req.body;
 
   if (!employeeId) {
@@ -891,14 +992,104 @@ app.post('/api/admin/remove-approved-leaves', async (req, res) => {
   try {
       const connection = await db.connectDB();
       const sql = await import('mssql');
+      
+      // Check if employee exists
+      const employeeCheck = await connection.request()
+          .input('employee_ID', sql.default.Int, parseInt(employeeId))
+          .query('SELECT 1 FROM Employee WHERE employee_ID = @employee_ID');
+      
+      if (!employeeCheck.recordset || employeeCheck.recordset.length === 0) {
+          return res.status(404).json({
+              success: false,
+              error: `Employee ${employeeId} not found`
+          });
+      }
+      
+      // Check how many approved leave attendance records exist before deletion
+      const beforeCount = await connection.request()
+          .input('employee_ID', sql.default.Int, parseInt(employeeId))
+          .query(`
+            SELECT COUNT(*) as count 
+            FROM Attendance a
+            WHERE a.emp_ID = @employee_ID
+            AND EXISTS (
+              SELECT 1 FROM Annual_Leave al inner join Leave l on l.request_ID = al.request_ID  
+              WHERE al.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+              UNION
+              SELECT 1 FROM Accidental_Leave acc inner join Leave l on l.request_ID = acc.request_ID 
+              WHERE acc.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+              UNION
+              SELECT 1 FROM Medical_Leave ml inner join Leave l on l.request_ID = ml.request_ID 
+              WHERE ml.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+              UNION
+              SELECT 1 FROM Compensation_Leave cl inner join Leave l on l.request_ID = cl.request_ID 
+              WHERE cl.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+              UNION 
+               SELECT 1 FROM Unpaid_Leave ul inner join Leave l on l.request_ID = ul.request_ID 
+              WHERE ul.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+            )
+          `);
 
       await connection.request()
           .input('Employee_id', sql.default.Int, parseInt(employeeId))
           .execute('Remove_Approved_Leaves');
+      
+      // Check how many records exist after deletion
+      const afterCount = await connection.request()
+          .input('employee_ID', sql.default.Int, parseInt(employeeId))
+          .query(`
+            SELECT COUNT(*) as count 
+            FROM Attendance a
+            WHERE a.emp_ID = @employee_ID
+            AND EXISTS (
+              SELECT 1 FROM Annual_Leave al inner join Leave l on l.request_ID = al.request_ID  
+              WHERE al.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+              UNION
+              SELECT 1 FROM Accidental_Leave acc inner join Leave l on l.request_ID = acc.request_ID 
+              WHERE acc.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+              UNION
+              SELECT 1 FROM Medical_Leave ml inner join Leave l on l.request_ID = ml.request_ID 
+              WHERE ml.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+              UNION
+              SELECT 1 FROM Compensation_Leave cl inner join Leave l on l.request_ID = cl.request_ID 
+              WHERE cl.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+              UNION 
+               SELECT 1 FROM Unpaid_Leave ul inner join Leave l on l.request_ID = ul.request_ID 
+              WHERE ul.emp_ID = @employee_ID
+              AND l.final_approval_status = 'approved'
+              AND a.date BETWEEN l.start_date AND l.end_date
+            )
+          `);
+      
+      const removedCount = beforeCount.recordset[0].count - afterCount.recordset[0].count;
+      
+      if (removedCount === 0) {
+          return res.status(404).json({
+              success: false,
+              error: `No approved leave attendance records found for employee ${employeeId}`
+          })};
 
       res.json({
           success: true,
-          message: `Approved leaves removed from attendance for employee ${employeeId}`
+          message: `${removedCount} approved leave attendance record(s) removed successfully for employee ${employeeId}`
       });
   } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -913,6 +1104,17 @@ app.post('/api/admin/replace-employee', async (req, res) => {
       return res.status(400).json({
           success: false,
           error: "emp1Id, emp2Id, fromDate and toDate are all required"
+      });
+  }
+
+  // Validate that fromDate is not after toDate
+  const from = new Date(fromDate);
+  const to = new Date(toDate);
+  
+  if (from > to) {
+      return res.status(400).json({ 
+          success: false, 
+          error: "From date can't be after the to date" 
       });
   }
 
@@ -937,7 +1139,7 @@ app.post('/api/admin/replace-employee', async (req, res) => {
 });
 
 // 7. Update the employee’s employment_status based on leave/active
-app.post('/api/admin/update-employment-status', async (req, res) => {
+app.put('/api/admin/update-employment-status', async (req, res) => {
   const { employeeId } = req.body;
 
   if (!employeeId) {
@@ -950,6 +1152,18 @@ app.post('/api/admin/update-employment-status', async (req, res) => {
   try {
       const connection = await db.connectDB();
       const sql = await import('mssql');
+      
+      // Check if employee exists
+      const employeeCheck = await connection.request()
+          .input('employee_ID', sql.default.Int, parseInt(employeeId))
+          .query('SELECT 1 FROM Employee WHERE employee_ID = @employee_ID');
+      
+      if (!employeeCheck.recordset || employeeCheck.recordset.length === 0) {
+          return res.status(404).json({
+              success: false,
+              error: `Employee ${employeeId} not found`
+          });
+      }
 
       await connection.request()
           .input('Employee_ID', sql.default.Int, parseInt(employeeId))
@@ -969,20 +1183,7 @@ app.post('/api/admin/update-employment-status', async (req, res) => {
 
 
 // =================== End Admin Part 2 ====================
-
-
-
-
-const PORT = process.env.PORT || 5001;
-const HOST = process.env.HOST || "0.0.0.0";
-
-app.listen(PORT, HOST, () => {
-  console.log(`✅ Backend running on http://${HOST}:${PORT}`);
-});
-
-// ============================================
-// ACADEMIC EMPLOYEE OPERATIONS ENDPOINTS
-// ============================================
+// =================== Academic Employee Part 1 ====================
 
 //2. Peformance for a semester
 app.get('/api/academic/performance', async (req, res) => {
@@ -1162,3 +1363,16 @@ app.get('/api/academic/leaves/status/current-month', async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 });
+
+
+
+const PORT = process.env.PORT || 5001;
+const HOST = process.env.HOST || "0.0.0.0";
+
+app.listen(PORT, HOST, () => {
+  console.log(`✅ Backend running on http://${HOST}:${PORT}`);
+});
+
+// ============================================
+// ACADEMIC EMPLOYEE OPERATIONS ENDPOINTS
+// ============================================

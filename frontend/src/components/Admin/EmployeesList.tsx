@@ -101,24 +101,24 @@ const EmployeesList = () => {
               ) : (
                 employees.map((emp) => (
                   <TableRow key={emp.employee_ID}>
-                    <TableCell className="font-medium">{emp.employee_ID}</TableCell>
-                    <TableCell>{`${emp.first_name} ${emp.last_name}`}</TableCell>
-                    <TableCell>{emp.gender}</TableCell>
-                    <TableCell>{emp.email}</TableCell>
-                    <TableCell>{emp.years_of_experience}</TableCell>
-                    <TableCell>{emp.official_day_off}</TableCell>
-                    <TableCell>{emp.type_of_contract}</TableCell>
+                    <TableCell className="font-medium">{emp.employee_ID || 'N/A'}</TableCell>
+                    <TableCell>{emp.first_name && emp.last_name ? `${emp.first_name} ${emp.last_name}` : 'N/A'}</TableCell>
+                    <TableCell>{emp.gender || 'N/A'}</TableCell>
+                    <TableCell>{emp.email || 'N/A'}</TableCell>
+                    <TableCell>{emp.years_of_experience ?? 'N/A'}</TableCell>
+                    <TableCell>{emp.official_day_off || 'N/A'}</TableCell>
+                    <TableCell>{emp.type_of_contract || 'N/A'}</TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
                         emp.employment_status === 'active' 
                           ? 'bg-green-50 text-green-700' 
                           : 'bg-gray-50 text-gray-700'
                       }`}>
-                        {emp.employment_status}
+                        {emp.employment_status || 'N/A'}
                       </span>
                     </TableCell>
-                    <TableCell>{emp.annual_balance}</TableCell>
-                    <TableCell>{emp.accidental_balance}</TableCell>
+                    <TableCell>{emp.annual_balance ?? 'N/A'}</TableCell>
+                    <TableCell>{emp.accidental_balance ?? 'N/A'}</TableCell>
                   </TableRow>
                 ))
               )}
