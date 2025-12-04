@@ -11,11 +11,16 @@ const Attendance = ({ user }: Props) => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchAttendance = async () => {
+    const employeeId = user?.id;
+    if (!employeeId) {
+      setError("User information is missing.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(
-        `http://localhost:5001/api/academic/attendance/current-month?employeeId=${user.employeeId}`
+        `http://localhost:5001/api/academic/attendance/current-month?employeeId=${employeeId}`
       );
       const data = await res.json();
       if (data.success) {

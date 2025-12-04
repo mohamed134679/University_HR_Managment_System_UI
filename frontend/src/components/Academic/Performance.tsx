@@ -22,13 +22,13 @@ const Performance = ({ user }: Props) => {
     }
     try {
       const res = await fetch(
-        `http://localhost:5001/api/academic/performance?employeeId=${user.employeeId}&semester=${encodeURIComponent(semester)}`
+        `http://localhost:5001/api/academic/performance?employeeId=${user.id}&semester=${encodeURIComponent(semester)}`
       );
       const data = await res.json();
-      if (data.success) {
-        setPerformance(data.performance || null);
+      if (data.success && Array.isArray(data.performance) && data.performance.length > 0) {
+        setPerformance(data.performance[0]);
       } else {
-        setError(data.error || "Failed to fetch performance.");
+        setError(data.error || "No performance data found for this semester.");
       }
     } catch (err: any) {
       setError("Network error. Please try again.");
@@ -44,7 +44,7 @@ const Performance = ({ user }: Props) => {
         <input
           type="text"
           className="border rounded px-3 py-2"
-          placeholder="Semester (e.g. Spring 2025)"
+          placeholder="Semester (e.g. W24)"
           value={semester}
           onChange={e => setSemester(e.target.value)}
         />
@@ -55,11 +55,9 @@ const Performance = ({ user }: Props) => {
       {error && <div className="text-red-600 mt-2">{error}</div>}
       {performance && (
         <div className="mt-4 border rounded p-4 bg-card">
-          {/* Adjust these fields based on your backend response */}
           <p><span className="font-medium">Semester:</span> {performance.semester}</p>
-          <p><span className="font-medium">Courses:</span> {performance.courses}</p>
           <p><span className="font-medium">Rating:</span> {performance.rating}</p>
-          <p><span className="font-medium">Remarks:</span> {performance.remarks}</p>
+          <p><span className="font-medium">Comments:</span> {performance.comments}</p>
         </div>
       )}
       {!performance && !loading && !error && (

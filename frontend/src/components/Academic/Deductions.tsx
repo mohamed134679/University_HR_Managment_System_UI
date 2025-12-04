@@ -23,7 +23,7 @@ const Deductions = ({ user }: Props) => {
     }
     try {
       const res = await fetch(
-        `http://localhost:5001/api/academic/deductions/attendance?employeeId=${user.employeeId}&fromDate=${fromDate}&toDate=${toDate}`
+        `http://localhost:5001/api/academic/deductions/attendance?employeeId=${user.id}&fromDate=${fromDate}&toDate=${toDate}`
       );
       const data = await res.json();
       if (data.success) {
@@ -65,15 +65,17 @@ const Deductions = ({ user }: Props) => {
             <tr className="bg-muted">
               <th className="px-2 py-1 text-left">Date</th>
               <th className="px-2 py-1 text-left">Deduction Amount</th>
-              <th className="px-2 py-1 text-left">Reason</th>
             </tr>
           </thead>
           <tbody>
             {deductions.map((ded, idx) => (
               <tr key={idx} className="border-t">
-                <td className="px-2 py-1">{ded.date}</td>
-                <td className="px-2 py-1">{ded.amount}</td>
-                <td className="px-2 py-1">{ded.reason}</td>
+                <td className="px-2 py-1">
+                  {ded.date ? new Date(ded.date).toLocaleDateString() : ""}
+                </td>
+                <td className="px-2 py-1 border-l border-gray-300">
+                  {ded.amount}
+                </td>
               </tr>
             ))}
           </tbody>

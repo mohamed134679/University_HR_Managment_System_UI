@@ -9,6 +9,7 @@ const ApplyLeave = ({ user }: Props) => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [reason, setReason] = useState("");
+  const [replacementEmp, setReplacementEmp] = useState(""); // NEW
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -16,9 +17,7 @@ const ApplyLeave = ({ user }: Props) => {
     e.preventDefault();
     setMessage(null);
 
-    console.log("fromDate:", fromDate, "toDate:", toDate, "reason:", reason);
-    // Trim reason and check for empty strings
-    if (!fromDate || !toDate || !reason.trim()) {
+    if (!fromDate || !toDate || !reason.trim() || !replacementEmp.trim()) {
       setMessage({ type: "error", text: "All fields are required" });
       return;
     }
@@ -33,10 +32,11 @@ const ApplyLeave = ({ user }: Props) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          employeeId: user.employeeId,
+          employeeId: user.id,
           fromDate,
           toDate,
           reason: reason.trim(),
+          replacementEmp: replacementEmp.trim(), // NEW
         }),
       });
       const data = await res.json();
@@ -45,6 +45,7 @@ const ApplyLeave = ({ user }: Props) => {
         setFromDate("");
         setToDate("");
         setReason("");
+        setReplacementEmp(""); // NEW
       } else {
         setMessage({ type: "error", text: data.error || "Failed to submit leave request." });
       }
@@ -84,6 +85,16 @@ const ApplyLeave = ({ user }: Props) => {
           placeholder="Reason for leave"
           value={reason}
           onChange={e => setReason(e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="block mb-1 font-medium">Replacement Employee ID</label>
+        <input
+          type="text"
+          className="w-full border rounded px-3 py-2"
+          placeholder="Replacement Employee ID"
+          value={replacementEmp}
+          onChange={e => setReplacementEmp(e.target.value)}
         />
       </div>
       <Button type="submit" disabled={loading}>

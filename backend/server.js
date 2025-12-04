@@ -998,8 +998,9 @@ app.get('/api/academic/performance', async (req, res) => {
             .input('employee_ID', parseInt(employeeId))
             .input('semester', semester)
             .query(`
-                SELECT * 
-                FROM Employee_Performance_Semester(@employee_ID, @semester)
+                SELECT performance_ID, rating, comments, semester, emp_ID
+                FROM Performance
+                WHERE emp_ID = @employee_ID AND semester = @semester
             `);
 
         res.json({ success: true, performance: result.recordset });
@@ -1028,7 +1029,6 @@ app.get('/api/academic/attendance/current-month', async (req, res) => {
                   AND YEAR(a.date) = YEAR(GETDATE())
                   AND NOT (
                       DATEPART(dw, a.date) = e.official_day_off
-                      AND a.attended = 0
                   )
             `);
 
@@ -1100,9 +1100,9 @@ app.get('/api/academic/deductions/attendance', async (req, res) => {
 //6. Apply Annual Leave
 app.post('/api/academic/leaves/annual/apply', async (req, res) => {
     try {
-        const { employeeId, fromDate, toDate, reason } = req.body;
+        const { employeeId, fromDate, toDate, reason, replacementEmp } = req.body;
 
-        if (!employeeId || !fromDate || !toDate || !reason) {
+        if (!employeeId || !fromDate || !toDate || !reason || !replacementEmp) {
             return res.status(400).json({ success: false, error: "All fields are required" });
         }
         const from = new Date(fromDate);
@@ -1115,14 +1115,26 @@ app.post('/api/academic/leaves/annual/apply', async (req, res) => {
         }
 
         const connection = await db.connectDB();
+        // Insert into Leave table
+        const leaveResult = await connection.request()
+            .input('date_of_request', fromDate) // or use current date
+            .input('start_date', fromDate)
+            .input('end_date', toDate)
+            .input('final_approval_status', 'Pending')
+            .query(`
+                INSERT INTO Leave (date_of_request, start_date, end_date, final_approval_status)
+                OUTPUT INSERTED.request_ID
+                VALUES (@date_of_request, @start_date, @end_date, @final_approval_status)
+            `);
+        const requestId = leaveResult.recordset[0].request_ID;
+        // Insert into Annual_Leave
         await connection.request()
-            .input('employee_ID', parseInt(employeeId))
-            .input('from_date', fromDate)
-            .input('to_date', toDate)
-            .input('reason', reason)
-             .query(`
-                INSERT INTO Annual_Leave (employee_ID, from_date, to_date, reason, status)
-                VALUES (@employee_ID, @from_date, @to_date, @reason, 'pending')
+            .input('request_ID', requestId)
+            .input('emp_ID', parseInt(employeeId))
+            .input('replacement_emp', parseInt(replacementEmp))
+            .query(`
+                INSERT INTO Annual_Leave (request_ID, emp_ID, replacement_emp)
+                VALUES (@request_ID, @emp_ID, @replacement_emp)
             `);
         res.json({ success: true, message: "Annual leave application submitted successfully" });
     } catch (err) {
@@ -1143,17 +1155,19 @@ app.get('/api/academic/leaves/status/current-month', async (req, res) => {
         const result = await connection.request()
             .input('employee_ID', parseInt(employeeId))
             .query(`
-                SELECT 'annual' AS leave_type, leave_ID, from_date, to_date, reason, status
-                FROM Annual_Leave
-                WHERE employee_ID = @employee_ID
-                  AND MONTH(from_date) = MONTH(GETDATE())
-                  AND YEAR(from_date) = YEAR(GETDATE())
+                SELECT 'annual' AS leave_type, a.request_ID AS leave_ID, l.start_date AS from_date, l.end_date AS to_date, l.final_approval_status AS status
+                FROM Annual_Leave a
+                JOIN Leave l ON a.request_ID = l.request_ID
+                WHERE a.emp_ID = @employee_ID
+                  AND MONTH(l.start_date) = MONTH(GETDATE())
+                  AND YEAR(l.start_date) = YEAR(GETDATE())
                 UNION ALL
-                SELECT 'accidental' AS leave_type, leave_ID, from_date, to_date, reason, status
-                FROM Accidental_Leave
-                WHERE employee_ID = @employee_ID
-                  AND MONTH(from_date) = MONTH(GETDATE())
-                  AND YEAR(from_date) = YEAR(GETDATE())
+                SELECT 'accidental' AS leave_type, ac.request_ID AS leave_ID, l.start_date AS from_date, l.end_date AS to_date, l.final_approval_status AS status
+                FROM Accidental_Leave ac
+                JOIN Leave l ON ac.request_ID = l.request_ID
+                WHERE ac.emp_ID = @employee_ID
+                  AND MONTH(l.start_date) = MONTH(GETDATE())
+                  AND YEAR(l.start_date) = YEAR(GETDATE())
                 ORDER BY from_date DESC
             `);
 
