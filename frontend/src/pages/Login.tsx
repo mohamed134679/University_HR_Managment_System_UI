@@ -61,16 +61,19 @@ const Login = () => {
       console.log("Navigating to dashboard for userType:", data.userType);
 
       // Route based on user type
-      if (data.userType === "hr") {
-        console.log("Redirecting to HR dashboard");
-        navigate("/hr/dashboard", { replace: true });
-      } else if (data.userType === "admin") {
-        console.log("Redirecting to ADMIN dashboard");
-        navigate("/admin/dashboard", { replace: true });
-      } else {
-        console.log("Redirecting to home");
-        navigate("/", { replace: true });
-      }
+if (data.userType === "hr") {
+  console.log("Redirecting to HR dashboard");
+  navigate("/hr/dashboard", { replace: true });
+} else if (data.userType === "admin") {
+  console.log("Redirecting to ADMIN dashboard");
+  navigate("/admin/dashboard", { replace: true });
+} else if (data.userType === "academic") {
+  console.log("Redirecting to ACADEMIC dashboard");
+  navigate("/academic/dashboard", { replace: true });
+} else {
+  console.log("Redirecting to home");
+  navigate("/", { replace: true });
+}
     } catch (err) {
       console.error("=== LOGIN ERROR ===", err);
       setError("Connection error. Make sure the backend is running on http://localhost:5001");

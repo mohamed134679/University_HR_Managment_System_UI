@@ -808,3 +808,186 @@ const HOST = process.env.HOST || "0.0.0.0";
 app.listen(PORT, HOST, () => {
   console.log(`✅ Backend running on http://${HOST}:${PORT}`);
 });
+
+// ============================================
+// ACADEMIC EMPLOYEE OPERATIONS ENDPOINTS
+// ============================================
+
+//2. Peformance for a semester
+app.get('/api/academic/performance', async (req, res) => {
+    try {
+        const { employeeId, semester } = req.query;
+
+        if (!employeeId || !semester) {
+            return res.status(400).json({ success: false, error: "Employee ID and semester are required" });
+        }
+
+        const connection = await db.connectDB();
+        const result = await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .input('semester', semester)
+            .query(`
+                SELECT * 
+                FROM Employee_Performance_Semester(@employee_ID, @semester)
+            `);
+
+        res.json({ success: true, performance: result.recordset });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+//3. Current Month Attendance 
+app.get('/api/academic/attendance/current-month', async (req, res) => {
+    try {
+        const { employeeId } = req.query;
+        if (!employeeId) {
+            return res.status(400).json({ success: false, error: "Employee ID is required" });
+        }
+
+        const connection = await db.connectDB();
+        const result = await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .query(`
+                SELECT a.*
+                FROM Attendance a
+                JOIN Employee e ON e.employee_ID = a.emp_ID
+                WHERE a.emp_ID = @employee_ID
+                  AND MONTH(a.date) = MONTH(GETDATE())
+                  AND YEAR(a.date) = YEAR(GETDATE())
+                  AND NOT (
+                      DATEPART(dw, a.date) = e.official_day_off
+                      AND a.attended = 0
+                  )
+            `);
+
+        res.json({ success: true, attendance: result.recordset });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+//4. Last Month Payroll
+app.get('/api/academic/payroll/last-month', async (req, res) => {
+    try {
+        const { employeeId } = req.query;
+        if (!employeeId) {
+            return res.status(400).json({ success: false, error: "Employee ID is required" });
+        }
+
+        const connection = await db.connectDB();
+        const result = await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .query(`
+                SELECT TOP 1 *
+                FROM Payroll
+                WHERE emp_ID = @employee_ID
+                  AND MONTH(payment_date) = MONTH(DATEADD(MONTH, -1, GETDATE()))
+                  AND YEAR(payment_date) = YEAR(DATEADD(MONTH, -1, GETDATE()))
+                ORDER BY payment_date DESC
+            `);
+
+        if (!result.recordset || result.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: "No payroll found for last month" });
+        }
+
+        res.json({ success: true, payroll: result.recordset[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+  })
+
+  //5.Deductions in a period
+app.get('/api/academic/deductions/attendance', async (req, res) => {
+    try {
+        const { employeeId, fromDate, toDate } = req.query;
+        if (!employeeId || !fromDate || !toDate) {
+            return res.status(400).json({ success: false, error: "Employee ID, from date, and to date are required" });
+        }
+
+        const connection = await db.connectDB();
+        const result = await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .input('from_date', fromDate)
+            .input('to_date', toDate)
+            .query(`
+                SELECT deduction_ID, emp_ID, date, amount, type, status
+                FROM Deduction
+                WHERE emp_ID = @employee_ID
+                  AND date >= @from_date
+                  AND date <= @to_date
+                  AND (type = 'missing_hours' OR type = 'missing_days')
+                ORDER BY date DESC
+            `);
+
+        res.json({ success: true, deductions: result.recordset });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+//6. Apply Annual Leave
+app.post('/api/academic/leaves/annual/apply', async (req, res) => {
+    try {
+        const { employeeId, fromDate, toDate, reason } = req.body;
+
+        if (!employeeId || !fromDate || !toDate || !reason) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
+        }
+        const from = new Date(fromDate);
+        const to = new Date(toDate);
+        if (isNaN(from) || isNaN(to)) {
+            return res.status(400).json({ success: false, error: "Invalid date format" });
+        }
+        if (from > to) {
+            return res.status(400).json({ success: false, error: "From date must be before to date" });
+        }
+
+        const connection = await db.connectDB();
+        await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .input('from_date', fromDate)
+            .input('to_date', toDate)
+            .input('reason', reason)
+             .query(`
+                INSERT INTO Annual_Leave (employee_ID, from_date, to_date, reason, status)
+                VALUES (@employee_ID, @from_date, @to_date, @reason, 'pending')
+            `);
+        res.json({ success: true, message: "Annual leave application submitted successfully" });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+//7. Statuses of Sumbitted Leaves
+
+app.get('/api/academic/leaves/status/current-month', async (req, res) => {
+    try {
+        const { employeeId } = req.query;
+        if (!employeeId) {
+            return res.status(400).json({ success: false, error: "Employee ID is required" });
+        }
+
+        const connection = await db.connectDB();
+        const result = await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .query(`
+                SELECT 'annual' AS leave_type, leave_ID, from_date, to_date, reason, status
+                FROM Annual_Leave
+                WHERE employee_ID = @employee_ID
+                  AND MONTH(from_date) = MONTH(GETDATE())
+                  AND YEAR(from_date) = YEAR(GETDATE())
+                UNION ALL
+                SELECT 'accidental' AS leave_type, leave_ID, from_date, to_date, reason, status
+                FROM Accidental_Leave
+                WHERE employee_ID = @employee_ID
+                  AND MONTH(from_date) = MONTH(GETDATE())
+                  AND YEAR(from_date) = YEAR(GETDATE())
+                ORDER BY from_date DESC
+            `);
+
+        res.json({ success: true, leaves: result.recordset });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
