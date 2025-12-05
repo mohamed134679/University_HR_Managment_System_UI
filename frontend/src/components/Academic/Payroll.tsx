@@ -15,7 +15,7 @@ const Payroll = ({ user }: Props) => {
     setError(null);
     try {
       const res = await fetch(
-        `http://localhost:5001/api/academic/payroll/last-month?employeeId=${user.employeeId}`
+        `http://localhost:5001/api/academic/payroll/last-month?employeeId=${user.id}`
       );
       const data = await res.json();
       if (data.success) {
@@ -39,12 +39,15 @@ const Payroll = ({ user }: Props) => {
       {error && <div className="text-red-600 mt-2">{error}</div>}
       {payroll && (
         <div className="mt-4 border rounded p-4 bg-card">
-          <p><span className="font-medium">Month:</span> {payroll.month || 'N/A'}</p>
-          <p><span className="font-medium">Year:</span> {payroll.year ?? 'N/A'}</p>
-          <p><span className="font-medium">Base Salary:</span> {payroll.baseSalary ?? 'N/A'}</p>
-          <p><span className="font-medium">Bonuses:</span> {payroll.bonuses ?? 'N/A'}</p>
-          <p><span className="font-medium">Deductions:</span> {payroll.deductions ?? 'N/A'}</p>
-          <p><span className="font-medium">Net Pay:</span> {payroll.netPay ?? 'N/A'}</p>
+          <p><span className="font-medium">Payroll ID:</span> {payroll.ID}</p>
+          <p><span className="font-medium">Employee ID:</span> {payroll.emp_ID}</p>
+          <p><span className="font-medium">Payment Date:</span> {payroll.payment_date ? new Date(payroll.payment_date).toLocaleDateString() : 'N/A'}</p>
+          <p><span className="font-medium">From Date:</span> {payroll.from_date ? new Date(payroll.from_date).toLocaleDateString() : 'N/A'}</p>
+          <p><span className="font-medium">To Date:</span> {payroll.to_date ? new Date(payroll.to_date).toLocaleDateString() : 'N/A'}</p>
+          <p><span className="font-medium">Bonus Amount:</span> {payroll.bonus_amount ?? 'N/A'}</p>
+          <p><span className="font-medium">Deductions Amount:</span> {payroll.deductions_amount ?? 'N/A'}</p>
+          <p><span className="font-medium">Final Salary Amount:</span> {payroll.final_salary_amount ?? 'N/A'}</p>
+          <p><span className="font-medium">Comments:</span> {payroll.comments || 'N/A'}</p>
         </div>
       )}
       {!payroll && !loading && !error && (

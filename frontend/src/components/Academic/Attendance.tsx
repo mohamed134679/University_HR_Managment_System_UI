@@ -15,7 +15,7 @@ const Attendance = ({ user }: Props) => {
     setError(null);
     try {
       const res = await fetch(
-        `http://localhost:5001/api/academic/attendance/current-month?employeeId=${user.employeeId}`
+        `http://localhost:5001/api/academic/attendance/current-month?employeeId=${user.id}`
       );
       const data = await res.json();
       if (data.success) {
@@ -41,21 +41,38 @@ const Attendance = ({ user }: Props) => {
         <table className="w-full mt-4 border rounded">
           <thead>
             <tr className="bg-muted">
+              <th className="px-2 py-1 text-left">Attendance ID</th>
+              <th className="px-2 py-1 text-left">Employee ID</th>
               <th className="px-2 py-1 text-left">Date</th>
               <th className="px-2 py-1 text-left">Check In</th>
               <th className="px-2 py-1 text-left">Check Out</th>
+              <th className="px-2 py-1 text-left">Total Duration</th>
               <th className="px-2 py-1 text-left">Status</th>
             </tr>
           </thead>
           <tbody>
-            {attendance.map((record, idx) => (
-              <tr key={idx} className="border-t">
-                <td className="px-2 py-1">{record.date || 'N/A'}</td>
-                <td className="px-2 py-1">{record.checkIn || 'N/A'}</td>
-                <td className="px-2 py-1">{record.checkOut || 'N/A'}</td>
-                <td className="px-2 py-1">{record.status || 'N/A'}</td>
-              </tr>
-            ))}
+            {attendance.map((record, idx) => {
+              const formatTime = (timeValue: any) => {
+                if (!timeValue) return 'N/A';
+                if (typeof timeValue === 'string' && timeValue.includes(':')) {
+                  return timeValue;
+                }
+                const date = new Date(timeValue);
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+              };
+
+              return (
+                <tr key={idx} className="border-t">
+                  <td className="px-2 py-1">{record.attendance_ID}</td>
+                  <td className="px-2 py-1">{record.emp_ID}</td>
+                  <td className="px-2 py-1">{record.date ? new Date(record.date).toLocaleDateString() : 'N/A'}</td>
+                  <td className="px-2 py-1">{formatTime(record.check_in_time)}</td>
+                  <td className="px-2 py-1">{formatTime(record.check_out_time)}</td>
+                  <td className="px-2 py-1">{record.total_duration || 'N/A'}</td>
+                  <td className="px-2 py-1">{record.status || 'N/A'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

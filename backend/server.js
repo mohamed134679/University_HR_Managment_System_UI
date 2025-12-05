@@ -1190,21 +1190,36 @@ app.get('/api/academic/performance', async (req, res) => {
     try {
         const { employeeId, semester } = req.query;
 
+        console.log('Performance request:', { employeeId, semester }); // Debug log
+
         if (!employeeId || !semester) {
             return res.status(400).json({ success: false, error: "Employee ID and semester are required" });
         }
 
+        // Validate semester format: W## or S## (W or S followed by exactly 2 digits)
+        const semesterPattern = /^[WS]\d{2}$/;
+        if (!semesterPattern.test(semester)) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Invalid semester format. Must be W## or S## (e.g., W24, S23)" 
+            });
+        }
+
         const connection = await db.connectDB();
+        
         const result = await connection.request()
             .input('employee_ID', parseInt(employeeId))
             .input('semester', semester)
             .query(`
                 SELECT * 
-                FROM Employee_Performance_Semester(@employee_ID, @semester)
+                FROM dbo.MyPerformance(@employee_ID, @semester)
             `);
+
+        console.log('Performance result:', result.recordset); // Debug log
 
         res.json({ success: true, performance: result.recordset });
     } catch (err) {
+        console.error('Performance error:', err); // Debug log
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -1213,6 +1228,9 @@ app.get('/api/academic/performance', async (req, res) => {
 app.get('/api/academic/attendance/current-month', async (req, res) => {
     try {
         const { employeeId } = req.query;
+        
+        console.log('Attendance request - employeeId:', employeeId); // Debug log
+        
         if (!employeeId) {
             return res.status(400).json({ success: false, error: "Employee ID is required" });
         }
@@ -1221,20 +1239,15 @@ app.get('/api/academic/attendance/current-month', async (req, res) => {
         const result = await connection.request()
             .input('employee_ID', parseInt(employeeId))
             .query(`
-                SELECT a.*
-                FROM Attendance a
-                JOIN Employee e ON e.employee_ID = a.emp_ID
-                WHERE a.emp_ID = @employee_ID
-                  AND MONTH(a.date) = MONTH(GETDATE())
-                  AND YEAR(a.date) = YEAR(GETDATE())
-                  AND NOT (
-                      DATEPART(dw, a.date) = e.official_day_off
-                      AND a.attended = 0
-                  )
+                SELECT *
+                FROM dbo.MyAttendance(@employee_ID)
             `);
+
+        console.log('Attendance result count:', result.recordset.length); // Debug log
 
         res.json({ success: true, attendance: result.recordset });
     } catch (err) {
+        console.error('Attendance error:', err); // Debug log
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -1251,12 +1264,8 @@ app.get('/api/academic/payroll/last-month', async (req, res) => {
         const result = await connection.request()
             .input('employee_ID', parseInt(employeeId))
             .query(`
-                SELECT TOP 1 *
-                FROM Payroll
-                WHERE emp_ID = @employee_ID
-                  AND MONTH(payment_date) = MONTH(DATEADD(MONTH, -1, GETDATE()))
-                  AND YEAR(payment_date) = YEAR(DATEADD(MONTH, -1, GETDATE()))
-                ORDER BY payment_date DESC
+                SELECT *
+                FROM dbo.Last_month_payroll(@employee_ID)
             `);
 
         if (!result.recordset || result.recordset.length === 0) {
@@ -1272,23 +1281,18 @@ app.get('/api/academic/payroll/last-month', async (req, res) => {
   //5.Deductions in a period
 app.get('/api/academic/deductions/attendance', async (req, res) => {
     try {
-        const { employeeId, fromDate, toDate } = req.query;
-        if (!employeeId || !fromDate || !toDate) {
-            return res.status(400).json({ success: false, error: "Employee ID, from date, and to date are required" });
+        const { employeeId, month } = req.query;
+        if (!employeeId || !month) {
+            return res.status(400).json({ success: false, error: "Employee ID and month are required" });
         }
 
         const connection = await db.connectDB();
         const result = await connection.request()
             .input('employee_ID', parseInt(employeeId))
-            .input('from_date', fromDate)
-            .input('to_date', toDate)
+            .input('month', parseInt(month))
             .query(`
-                SELECT deduction_ID, emp_ID, date, amount, type, status
-                FROM Deduction
-                WHERE emp_ID = @employee_ID
-                  AND date >= @from_date
-                  AND date <= @to_date
-                  AND (type = 'missing_hours' OR type = 'missing_days')
+                SELECT *
+                FROM dbo.Deductions_Attendance(@employee_ID, @month)
                 ORDER BY date DESC
             `);
 

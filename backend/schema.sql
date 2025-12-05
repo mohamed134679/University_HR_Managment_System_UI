@@ -1,3 +1,6 @@
+---------------- Procedures Create_Holiday and HR_approval_comp are updated----------------------------
+
+
 create DATABASE University_HR_ManagementSystem1;
 GO
 USE University_HR_ManagementSystem1;
@@ -438,14 +441,24 @@ GO
 
 
 -- 2.3 d)
-CREATE PROC Create_Holiday
+CREATE or alter PROC Create_Holiday
 AS
-CREATE TABLE Holiday(
-holiday_ID int IDENTITY,
-holiday_name varchar(50),
-from_date date,
-to_date date
-);
+begin
+	IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Holiday')
+	BEGIN
+		CREATE TABLE Holiday(
+			holiday_ID int IDENTITY,
+			holiday_name varchar(50),
+			from_date date,
+			to_date date
+		);
+	END
+	else
+	begin
+		print 'There is already Holiday table in the database'
+	end
+end
+
 GO
 
 
@@ -770,7 +783,7 @@ begin
     FROM Employee 
     WHERE employee_id = @emp_ID;
 -- check if it is not already pending, print error message
-    IF @current_status <> 'pending'
+    IF @current_status <> 'Pending'
     BEGIN
         PRINT 'Error: Leave request has already been processed.';
         RETURN;
@@ -781,11 +794,11 @@ begin
     begin
         -- update the table approve
         update Employee_Approve_Leave
-        set status = 'approved'
+        set status = 'Approved'
         where Emp1_ID = @HR_ID and leave_ID=@request_ID
         -- update the final status
         update Leave
-        set final_approval_status = 'approved'
+        set final_approval_status = 'Approved'
         where request_ID = @request_ID
         -- deduct from Annual balance of Employee
         UPDATE Employee 
@@ -806,12 +819,12 @@ insert into Employee_Replace_Employee (Emp1_ID,Emp2_ID,from_date, to_date) value
     begin
         --reject the leave
         UPDATE Employee_Approve_Leave 
-        SET status = 'rejected' 
+        SET status = 'Rejected' 
         WHERE leave_ID = @request_ID AND Emp1_ID = @HR_ID;
 
 
         UPDATE Leave 
-        SET final_approval_status = 'rejected' 
+        SET final_approval_status = 'Rejected' 
         WHERE request_ID = @request_ID;
     end
 
@@ -835,7 +848,7 @@ BEGIN
     WHERE employee_id = @emp_ID;
 
     -- Check if leave is already processed, print error message
-    IF @current_status <> 'pending'
+    IF @current_status <> 'Pending'
     BEGIN
         PRINT 'Error: Leave request has already been processed.';
         RETURN;
@@ -852,13 +865,13 @@ BEGIN
             
             -- Update HR approval status
             UPDATE Employee_Approve_Leave 
-            SET status = 'approved' 
+            SET status = 'Approved' 
             WHERE leave_ID = @request_ID AND Emp1_ID = @HR_ID;
 
 
             -- update the final status
             UPDATE Leave 
-            SET final_approval_status = 'approved' 
+            SET final_approval_status = 'Approved' 
             WHERE request_ID = @request_ID;
             
             
@@ -871,13 +884,13 @@ BEGIN
         begin
             -- Update HR approval status
             UPDATE Employee_Approve_Leave 
-            SET status = 'rejected' 
+            SET status = 'Rejected' 
             WHERE leave_ID = @request_ID AND Emp1_ID = @HR_ID;
 
 
              -- Reject the leave
             UPDATE Leave 
-            SET final_approval_status = 'rejected' 
+            SET final_approval_status = 'Rejected' 
             WHERE request_ID = @request_ID;
         end
 end
@@ -1008,83 +1021,111 @@ GO
 
 
 ------------------------------------------------ d) -----------------------------------------------------
-CREATE or alter PROC HR_approval_comp
-@request_ID int, 
-@HR_ID int
-AS	
-DECLARE @check_in time
-DECLARE @check_out time
-DECLARE @instead_of_day date
-DECLARE @emp_id int
+CREATE or alter PROC HR_approval_comp @request_ID int, @HR_ID int
+AS
+declare @emplid int 
+declare @day_off varchar(50)
+declare @dep_name varchar(50)
+declare @date_original_day date
+declare @compensationDate date
+declare @replacementID int
 
-IF EXISTS(
-select 1 from Compensation_Leave
-where request_ID = @request_ID 
-)
-begin
-declare @current_status varchar(50)
-SELECT @current_status = final_approval_status FROM Leave 
-        WHERE request_ID = @request_ID;
+--get the ID of the employee
+select @emplid=emp_ID, @date_original_day=date_of_original_workday, @replacementID=replacement_emp from Compensation_Leave where @request_ID=request_ID
 
-        -- Check if leave is already processed
-        IF @current_status <> 'Pending'
-        BEGIN
-            PRINT 'Error: Leave request has already been processed.';
-            RETURN;
-        END
+select @day_off=official_day_off,@dep_name=dept_name
+from Employee where employee_id=@emplid
+-- CASE 1 check if date_of_original_workday not his day off
+DECLARE @day_name varchar(50);
+SET @day_name = DATENAME(WEEKDAY, @date_original_day);
+if @day_off <> @day_name
+begin 
+UPDATE leave 
+set final_approval_status='Rejected'
+where request_ID=@request_ID 
 
------------------- get the original work day and the ID of the requester ----------
-	select @instead_of_day = date_of_original_workday, @emp_id = emp_ID
-	from Compensation_Leave
-	where request_ID = @request_ID
-	---- check if the original work day is the dayoff ------------
-	if EXISTS (
-		select 1 from Employee
-		where employee_id = @emp_id and official_day_off = DATENAME(WEEKDAY, @instead_of_day)
-	)
-	begin
-	-------------------- check 8 hours in this day and the replacement is not on leave -----------------------
-
-		declare @replacement_ID int
-		select @replacement_ID = replacement_emp
-		from Compensation_Leave
-		where emp_ID = @emp_id and request_ID = @request_ID
-		------------- check on leave -----------------------------
-		if EXISTS(
-			select 1 from Employee
-			where employee_id = @replacement_ID and employment_status <> 'onleave'
-		)
-		begin
-		-------------------------- check 8 hours and in the same month ------------------------------
-			SELECT @check_in=check_in_time, @check_out= check_out_time
-			FROM Attendance
-			WHERE date= @instead_of_day AND emp_ID=@emp_id
-
-
-			IF( DATEDIFF(HOUR,@check_in, @check_out)>=8) and exists(
-                select 1 from Leave l
-                inner join Compensation_Leave cl
-                on l.request_ID = cl.request_ID
-                where month(l.date_of_request) = month(cl.date_of_original_workday) and year(l.date_of_request) = year(cl.date_of_original_workday) and l.request_ID = @request_ID
-            )
-			begin
-				---------- approve the leave -----------------
-				UPDATE Employee_Approve_Leave
-				SET status = 'Approved' 
-				WHERE leave_ID = @request_ID AND Emp1_ID = @HR_ID
-
-				UPDATE LEAVE
-				SET final_approval_status = 'Approved' 
-				WHERE request_ID = @request_ID
-
-				return
-			end
-		end
-		
-		
-	end
-
+--update employee approve leave 
+update Employee_Approve_Leave 
+set status='Rejected'
+where leave_ID=@request_ID
+return
 end
+-- Same Month and Same Year
+select @compensationDate=start_date from leave where request_ID=@request_ID
+
+if NOT (MONTH (@compensationDate) =MONTH (@date_original_day) and YEAR (@compensationDate) =YEAR (@date_original_day))
+begin 
+UPDATE leave 
+set final_approval_status='Rejected'
+where request_ID=@request_ID 
+
+--update employee approve leave 
+update Employee_Approve_Leave 
+set status='Rejected'
+where leave_ID=@request_ID
+return
+end
+--Rules of replacement same Department and replacement not on leave
+--In case the person of replacement isn't on leave so, i need to check the dates of the requests  
+
+declare @onleave bit =dbo.Is_On_Leave (@replacementID ,@compensationDate, @compensationDate)
+if @onleave =1
+begin 
+update Employee_Approve_Leave
+set status='Rejected'
+where leave_ID=@request_ID 
+--update final status of Leave 
+update leave
+set final_approval_status='Rejected'
+where request_ID=@request_ID 
+return
+end
+--check if same department 
+--getting dep of replacement
+declare @dep_name_2 varchar(50)
+select @dep_name_2=dept_name from Employee where employee_id=@replacementID
+--not equal reject 
+if (@dep_name<>@dep_name_2) 
+begin
+update Employee_Approve_Leave
+set status='Rejected'
+where leave_ID=@request_ID 
+--update final status of Leave 
+update leave
+set final_approval_status='Rejected'
+where request_ID=@request_ID 
+
+return 
+end
+-------------------------- Compensation needs at less 8 hours else reject
+declare @total_duration int
+select @total_duration=total_duration from Attendance where date=@date_original_day and emp_ID=@emplid
+
+if @total_duration < 8
+begin 
+update Employee_Approve_Leave
+set status='Rejected'
+where leave_ID=@request_ID 
+--update final status of Leave 
+update leave
+set final_approval_status='Rejected'
+where request_ID=@request_ID 
+return 
+end
+--accept and insert into table employee replace employee
+update Employee_Approve_Leave
+set status='Approved'
+where leave_ID=@request_ID 
+---- update leave 
+update leave
+set final_approval_status='Approved'
+where request_ID=@request_ID 
+--- Update Employee_Replace_Employee if approved
+insert into Employee_Replace_Employee values (@emplid,@replacementID,@compensationDate,@compensationDate)
+
+
+
+
 GO
 ----------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
@@ -2168,11 +2209,7 @@ AS
 	INSERT INTO Performance (rating, comments,emp_ID, semester)
 	VALUES(@rating, @comment, @employee_ID, @semester)
 
-
-
-
 go
-------
 insert into Department (name,building_location)
 values ('MET','C building')
 insert into Department (name,building_location)
@@ -2445,7 +2482,7 @@ values ('09-15-2025','10-19-2025','10-30-2025','approved')
 
 insert into leave (date_of_request,start_date,end_date
 ,final_approval_status)
-values ('10-09-2025','10-28-2025','10-28-2025','pending')
+values ('10-09-2025','10-28-2025','10-28-2025','PENDING')
 
 insert into leave (date_of_request,start_date,end_date
 ,final_approval_status)
@@ -2490,15 +2527,15 @@ values ('07-13-2025','08-13-2025','09-09-2025','approved')
 
 insert into leave (date_of_request,start_date,end_date
 ,final_approval_status)
-values ('08-13-2025','11-02-2025','12-13-2025','pending')
+values ('08-13-2025','11-02-2025','12-13-2025','Pending')
 
 insert into leave (date_of_request,start_date,end_date
 ,final_approval_status)
-values ('11-15-2025','11-27-2025','12-02-2025','pending')
+values ('11-15-2025','11-27-2025','12-02-2025','Pending')
 
 insert into leave (date_of_request,start_date,end_date
 ,final_approval_status)
-values ('10-15-2025','11-20-2025','12-02-2025','pending')
+values ('10-15-2025','11-20-2025','12-02-2025','Pending')
 
 insert into leave (date_of_request,start_date,end_date
 ,final_approval_status)
@@ -2707,28 +2744,28 @@ values (15,2,'approved')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
 values (4,2,'approved')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (13,3,'pending')
+values (13,3,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (5,3,'pending')
+values (5,3,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (15,4,'pending')
+values (15,4,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (4,4,'pending') 
+values (4,4,'PENDING') 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (9,5,'pending')
+values (9,5,'PENDING')
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (5,6,'pending')
+values (5,6,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (4,7,'pending')
+values (4,7,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (5,8,'pending')
+values (5,8,'PENDING')
 
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (4,9,'pending')  
+values (4,9,'PENDING')  
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (7,9,'pending') 
+values (7,9,'PENDING') 
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
 values (5,10,'approved')
@@ -2741,9 +2778,9 @@ insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
 values (7,11,'approved')
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (5,12,'pending')
+values (5,12,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (7,12,'pending')
+values (7,12,'PENDING')
 
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
@@ -2754,26 +2791,26 @@ insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
 values (4,13,'approved')
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (15,14,'pending')
+values (15,14,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (13,14,'pending')
+values (13,14,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (5,14,'pending')
+values (5,14,'PENDING')
 
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (15,15,'pending')
+values (15,15,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (11,15,'pending')
+values (11,15,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (4,15,'pending')
+values (4,15,'PENDING')
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (15,16,'pending')
+values (15,16,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (11,16,'pending')
+values (11,16,'PENDING')
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
-values (4,16,'pending') 
+values (4,16,'PENDING') 
 
 insert into Employee_Approve_Leave (Emp1_ID,leave_ID,status)
 values (4,17,'approved')
