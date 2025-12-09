@@ -84,6 +84,7 @@ const AdminActions = () => {
       setLoading(true);
       setMessage(null);
 
+      // Send the raw values entered in the form (no additional frontend formatting)
       const response = await fetch("http://localhost:5001/api/admin/update-attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,6 +167,11 @@ const AdminActions = () => {
       });
 
       const data = await response.json();
+
+      if (data.success === false) {
+        setMessage({ type: "error", text: data.message });
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to initiate attendance");

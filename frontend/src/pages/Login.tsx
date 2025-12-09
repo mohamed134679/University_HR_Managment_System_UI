@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,23 @@ const Login = () => {
   const [userType, setUserType] = useState<"academic" | "admin" | "hr">("academic");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [stats, setStats] = useState<{ employees: number; departments: number }>({ employees: 0, departments: 0 });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch("http://localhost:5001/api/stats/counts");
+        const data = await response.json();
+        if (data.success) {
+          setStats({ employees: data.employees, departments: data.departments });
+        }
+      } catch (error) {
+        console.error("Failed to fetch stats:", error);
+      }
+    };
+
+    fetchStats();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,14 +142,14 @@ if (data.userType === "hr") {
                 <Building2 className="w-5 h-5 text-primary" />
                 <div>
                   <p className="text-xs text-muted-foreground">Active Employees</p>
-                  <p className="text-lg font-semibold">1,247</p>
+                  <p className="text-lg font-semibold">{stats.employees}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-3 bg-card rounded-xl border border-border/50 shadow-sm">
                 <GraduationCap className="w-5 h-5 text-accent" />
                 <div>
                   <p className="text-xs text-muted-foreground">Departments</p>
-                  <p className="text-lg font-semibold">12</p>
+                  <p className="text-lg font-semibold">{stats.departments}</p>
                 </div>
               </div>
             </div>

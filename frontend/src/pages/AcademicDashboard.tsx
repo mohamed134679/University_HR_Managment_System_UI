@@ -9,11 +9,14 @@ import Payroll from "@/components/Academic/Payroll";
 import Deductions from "@/components/Academic/Deductions";
 import ApplyLeave from "@/components/Academic/ApplyLeave";
 import LeaveStatus from "@/components/Academic/LeaveStatus";
+import UpperboardApprovals from "@/components/Academic/UpperboardApprovals";
+import DeanEvaluation from "@/components/Academic/DeanEvaluation";
 
 const AcademicDashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -27,7 +30,23 @@ const AcademicDashboard = () => {
       return;
     }
     setUser(userData);
-    setLoading(false);
+    
+    // Fetch user role
+    const fetchUserRole = async () => {
+      try {
+        const res = await fetch(`http://localhost:5001/api/academic/user-role?employeeId=${userData.id}`);
+        const data = await res.json();
+        if (data.success) {
+          setUserRole(data.role);
+        }
+      } catch (err) {
+        console.error("Failed to fetch user role:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchUserRole();
   }, [navigate]);
 
   const handleLogout = () => {
@@ -70,13 +89,19 @@ const AcademicDashboard = () => {
 
       <div className="container mx-auto px-4 py-6">
         <Tabs defaultValue="performance" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className={`grid w-full ${userRole === 'Dean' ? 'grid-cols-8' : (userRole === 'Vice Dean' || userRole === 'President') ? 'grid-cols-7' : 'grid-cols-6'}`}>
             <TabsTrigger value="performance">Performance</TabsTrigger>
             <TabsTrigger value="attendance">Attendance</TabsTrigger>
             <TabsTrigger value="payroll">Payroll</TabsTrigger>
             <TabsTrigger value="deductions">Deductions</TabsTrigger>
             <TabsTrigger value="apply-leave">Apply Leave</TabsTrigger>
             <TabsTrigger value="leave-status">Leave Status</TabsTrigger>
+            {(userRole === 'Dean' || userRole === 'Vice Dean' || userRole === 'President') && (
+              <>
+                <TabsTrigger value="approvals">Approvals</TabsTrigger>
+                {userRole === 'Dean' && <TabsTrigger value="evaluation">Evaluation</TabsTrigger>}
+              </>
+            )}
           </TabsList>
 
           <TabsContent value="performance" className="space-y-6">
@@ -97,6 +122,16 @@ const AcademicDashboard = () => {
           <TabsContent value="leave-status" className="space-y-6">
             <LeaveStatus user={user} />
           </TabsContent>
+          {(userRole === 'Dean' || userRole === 'Vice Dean' || userRole === 'President') && (
+            <TabsContent value="approvals" className="space-y-6">
+              <UpperboardApprovals user={user} />
+            </TabsContent>
+          )}
+          {userRole === 'Dean' && (
+            <TabsContent value="evaluation" className="space-y-6">
+              <DeanEvaluation user={user} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>

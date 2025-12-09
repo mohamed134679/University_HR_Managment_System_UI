@@ -45,25 +45,20 @@ const AttendanceYesterday = () => {
 
   const formatTime = (time: string | null) => {
     if (!time) return 'N/A';
-    
-    // Handle time string formats
     const timeStr = String(time);
-    
-    // If it's in HH:MM:SS or HH:MM format
-    if (timeStr.match(/^\d{2}:\d{2}(:\d{2})?$/)) {
-      return timeStr.substring(0, 5);
+
+    // Extract HH:MM from various formats using regex
+    const hhmmMatch = timeStr.match(/(\d{2}:\d{2})(?::\d{2})?/);
+    if (hhmmMatch && hhmmMatch[1]) return hhmmMatch[1];
+
+    // Fallback: try parsing as date
+    const date = new Date(timeStr);
+    if (!isNaN(date.getTime())) {
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
     }
-    
-    // If it's an ISO date string or contains 'T', extract time portion
-    if (timeStr.includes('T') || timeStr.includes('1970')) {
-      const date = new Date(timeStr);
-      if (!isNaN(date.getTime())) {
-        const hours = date.getUTCHours().toString().padStart(2, '0');
-        const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-        return `${hours}:${minutes}`;
-      }
-    }
-    
+
     return timeStr.substring(0, 5);
   };
 

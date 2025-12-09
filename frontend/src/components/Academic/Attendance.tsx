@@ -54,11 +54,19 @@ const Attendance = ({ user }: Props) => {
             {attendance.map((record, idx) => {
               const formatTime = (timeValue: any) => {
                 if (!timeValue) return 'N/A';
-                if (typeof timeValue === 'string' && timeValue.includes(':')) {
-                  return timeValue;
-                }
+                
+                const timeString = String(timeValue);
+                // Extract HH:MM from various formats (HH:MM:SS, HH:MM, ISO datetime)
+                const match = timeString.match(/(\d{2}:\d{2})(?::\d{2})?/);
+                if (match) return match[1];
+                
+                // Fallback: try parsing as date
                 const date = new Date(timeValue);
-                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                if (!isNaN(date.getTime())) {
+                  return date.toTimeString().substring(0, 5);
+                }
+                
+                return 'N/A';
               };
 
               return (

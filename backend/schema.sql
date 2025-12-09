@@ -1778,7 +1778,7 @@ IF(dbo.Is_On_Leave(@replacement_ID, @start_date, @end_date) =0)
 	END
 		UPDATE Employee_Approve_Leave
 		SET status='Rejected'
-		WHERE leave_ID=@request_ID		
+		WHERE leave_ID=@request_ID			
 
 		UPDATE Leave
 		SET final_approval_status='Rejected'

@@ -7,8 +7,8 @@ import EmployeesList from "@/components/Admin/EmployeesList";
 import DepartmentStats from "@/components/Admin/DepartmentStats";
 import RejectedMedicals from "@/components/Admin/RejectedMedicals";
 import AdminActions from "@/components/Admin/AdminActions";
-import AttendanceYesterday from "@/components/Admin/AttendanceYesterday";
 import PerformanceWinter from "@/components/Admin/PerformanceWinter";
+import AttendanceYesterday from "@/components/Admin/AttendanceYesterday";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();

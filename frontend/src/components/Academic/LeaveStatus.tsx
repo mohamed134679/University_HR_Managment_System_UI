@@ -15,7 +15,7 @@ const LeaveStatus = ({ user }: Props) => {
     setError(null);
     try {
       const res = await fetch(
-        `http://localhost:5001/api/academic/leaves/status/current-month?employeeId=${user.employeeId}`
+        `http://localhost:5001/api/academic/leaves/status/current-month?employeeId=${user.id}`
       );
       const data = await res.json();
       if (data.success) {
@@ -41,21 +41,17 @@ const LeaveStatus = ({ user }: Props) => {
         <table className="w-full mt-4 border rounded">
           <thead>
             <tr className="bg-muted">
-              <th className="px-2 py-1 text-left">Type</th>
-              <th className="px-2 py-1 text-left">From</th>
-              <th className="px-2 py-1 text-left">To</th>
-              <th className="px-2 py-1 text-left">Reason</th>
+              <th className="px-2 py-1 text-left">Request ID</th>
+              <th className="px-2 py-1 text-left">Date of Request</th>
               <th className="px-2 py-1 text-left">Status</th>
             </tr>
           </thead>
           <tbody>
             {leaves.map((leave, idx) => (
               <tr key={idx} className="border-t">
-                <td className="px-2 py-1 capitalize">{leave.leave_type || 'N/A'}</td>
-                <td className="px-2 py-1">{leave.from_date || 'N/A'}</td>
-                <td className="px-2 py-1">{leave.to_date || 'N/A'}</td>
-                <td className="px-2 py-1">{leave.reason || 'N/A'}</td>
-                <td className="px-2 py-1">{leave.status || 'N/A'}</td>
+                <td className="px-2 py-1">{leave.request_ID || 'N/A'}</td>
+                <td className="px-2 py-1">{leave.date_of_request ? new Date(leave.date_of_request).toLocaleDateString() : 'N/A'}</td>
+                <td className="px-2 py-1">{leave.final_approval_status || 'N/A'}</td>
               </tr>
             ))}
           </tbody>

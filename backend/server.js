@@ -27,6 +27,30 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
+// Get employee and department counts for homepage
+app.get("/api/stats/counts", async (req, res) => {
+  try {
+    const connection = await db.connectDB();
+    
+    // Get total employee count
+    const employeeResult = await connection.request()
+      .query('SELECT COUNT(*) as count FROM Employee');
+    
+    // Get total department count
+    const departmentResult = await connection.request()
+      .query('SELECT COUNT(*) as count FROM Department');
+    
+    res.json({
+      success: true,
+      employees: employeeResult.recordset[0].count,
+      departments: departmentResult.recordset[0].count
+    });
+  } catch (error) {
+    console.error("Stats Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // HR Login endpoint
 app.post("/api/login/hr", async (req, res) => {
   try {
@@ -588,6 +612,102 @@ app.post("/api/hr/deductions/missing-days", async (req, res) => {
   }
 });
 
+// Add unpaid leave deduction
+app.post("/api/hr/deductions/unpaid-leave", async (req, res) => {
+  try {
+    const { employeeId } = req.body;
+
+    if (!employeeId) {
+      return res.status(400).json({ success: false, error: "Employee ID is required" });
+    }
+
+    const connection = await db.connectDB();
+
+    // Check if employee has an approved unpaid leave in current month
+    const unpaidLeaveCheck = await connection.request()
+      .input('employee_ID', parseInt(employeeId))
+      .query(`
+        SELECT l.request_ID
+        FROM Unpaid_Leave un
+        INNER JOIN Leave l ON l.request_ID = un.request_ID
+        WHERE un.Emp_ID = @employee_ID
+        AND l.final_approval_status = 'approved' 
+        AND MONTH(l.start_date) = MONTH(GETDATE()) 
+        AND YEAR(l.start_date) = YEAR(GETDATE())
+      `);
+
+    if (!unpaidLeaveCheck.recordset || unpaidLeaveCheck.recordset.length === 0) {
+      return res.json({
+        success: false,
+        message: "No approved unpaid leave found for this employee in the current month"
+      });
+    }
+
+    // Check if deduction already exists for this unpaid leave
+    const existingDeduction = await connection.request()
+      .input('employee_ID', parseInt(employeeId))
+      .input('unpaid_ID', unpaidLeaveCheck.recordset[0].request_ID)
+      .query(`
+        SELECT 1 
+        FROM Deduction 
+        WHERE emp_ID = @employee_ID 
+        AND type = 'unpaid'
+        AND unpaid_ID = @unpaid_ID
+      `);
+
+    if (existingDeduction.recordset && existingDeduction.recordset.length > 0) {
+      return res.json({
+        success: true,
+        message: "Deduction for this unpaid leave already exists"
+      });
+    }
+
+    // Get current deduction count before
+    const beforeCount = await connection.request()
+      .input('employee_ID', parseInt(employeeId))
+      .query(`
+        SELECT COUNT(*) as count 
+        FROM Deduction 
+        WHERE emp_ID = @employee_ID 
+        AND MONTH(date) = MONTH(GETDATE())
+        AND YEAR(date) = YEAR(GETDATE())
+      `);
+
+    console.log('Before count (unpaid leave):', beforeCount.recordset[0].count);
+
+    // Call stored procedure
+    await connection.request()
+      .input('employee_ID', parseInt(employeeId))
+      .execute('Deduction_unpaid');
+
+    // Check if deduction was added
+    const afterCount = await connection.request()
+      .input('employee_ID', parseInt(employeeId))
+      .query(`
+        SELECT COUNT(*) as count 
+        FROM Deduction 
+        WHERE emp_ID = @employee_ID 
+        AND MONTH(date) = MONTH(GETDATE())
+        AND YEAR(date) = YEAR(GETDATE())
+      `);
+
+    console.log('After count (unpaid leave):', afterCount.recordset[0].count);
+
+    const deductionApplied = afterCount.recordset[0].count > beforeCount.recordset[0].count;
+
+    res.json({
+      success: true,
+      message: deductionApplied 
+        ? "Deduction for unpaid leave applied successfully" 
+        : "Unpaid leave deduction already processed or no eligible unpaid leave found"
+    });
+
+  } catch (error) {
+    console.error("Error processing unpaid leave deduction:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Generate monthly payroll
 app.post("/api/hr/payroll/generate", async (req, res) => {
   try {
@@ -750,24 +870,13 @@ app.post('/api/admin/update-attendance', async (req, res) => {
         const sql = await import('mssql');
         
         // Format times as HH:MM:SS if they're in HH:MM format
-        const formatTime = (time) => {
-            if (!time || time.trim() === '') return null;
-            if (time.length === 5) { // HH:MM format
-                return `${time}:00`; // Convert to HH:MM:SS
-            }
-            return time;
-        };
-
-        const formattedCheckIn = formatTime(checkIn);
-        const formattedCheckOut = formatTime(checkOut);
-
         await connection.request()
-            .input('Employee_id',parseInt(employeeId))
-            .input('check_in_time', formattedCheckIn)
-            .input('check_out_time', formattedCheckOut)
+            .input('Employee_id', sql.default.Int, parseInt(employeeId))
+            .input('check_in_time', sql.default.VarChar(8),checkIn)
+            .input('check_out_time', sql.default.VarChar(8), checkOut)
             .execute('Update_Attendance');
         
-        const message = formattedCheckIn && formattedCheckOut 
+        const message = checkIn && checkOut 
             ? "Attendance updated successfully" 
             : "Employee marked as absent successfully";
         res.json({ success: true, message });
@@ -813,6 +922,21 @@ app.post('/api/admin/add-holiday', async (req, res) => {
 app.post('/api/admin/initiate-attendance', async (req, res) => {
     try {
         const connection = await db.connectDB();
+        
+        // Check if attendance has already been initiated for today
+        const todayCheck = await connection.request().query(`
+            SELECT COUNT(*) as count 
+            FROM Attendance 
+            WHERE CAST(date AS DATE) = CAST(GETDATE() AS DATE)
+        `);
+        
+        if (todayCheck.recordset[0].count > 0) {
+            return res.json({ 
+                success: false, 
+                message: "Attendance has already been initiated for today" 
+            });
+        }
+        
         await connection.request().execute('Initiate_Attendance');
         res.json({ success: true, message: "Attendance initiated for all employees" });
     } catch (err) {
@@ -1305,9 +1429,9 @@ app.get('/api/academic/deductions/attendance', async (req, res) => {
 //6. Apply Annual Leave
 app.post('/api/academic/leaves/annual/apply', async (req, res) => {
     try {
-        const { employeeId, fromDate, toDate, reason } = req.body;
+        const { employeeId, replacementEmp, fromDate, toDate } = req.body;
 
-        if (!employeeId || !fromDate || !toDate || !reason) {
+        if (!employeeId || !fromDate || !toDate || !replacementEmp) {
             return res.status(400).json({ success: false, error: "All fields are required" });
         }
         const from = new Date(fromDate);
@@ -1322,13 +1446,11 @@ app.post('/api/academic/leaves/annual/apply', async (req, res) => {
         const connection = await db.connectDB();
         await connection.request()
             .input('employee_ID', parseInt(employeeId))
-            .input('from_date', fromDate)
-            .input('to_date', toDate)
-            .input('reason', reason)
-             .query(`
-                INSERT INTO Annual_Leave (employee_ID, from_date, to_date, reason, status)
-                VALUES (@employee_ID, @from_date, @to_date, @reason, 'pending')
-            `);
+            .input('replacement_emp', parseInt(replacementEmp))
+            .input('start_date', fromDate)
+            .input('end_date', toDate)
+            .execute('Submit_annual');
+            
         res.json({ success: true, message: "Annual leave application submitted successfully" });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -1347,19 +1469,9 @@ app.get('/api/academic/leaves/status/current-month', async (req, res) => {
         const connection = await db.connectDB();
         const result = await connection.request()
             .input('employee_ID', parseInt(employeeId))
-            .query(`
-                SELECT 'annual' AS leave_type, leave_ID, from_date, to_date, reason, status
-                FROM Annual_Leave
-                WHERE employee_ID = @employee_ID
-                  AND MONTH(from_date) = MONTH(GETDATE())
-                  AND YEAR(from_date) = YEAR(GETDATE())
-                UNION ALL
-                SELECT 'accidental' AS leave_type, leave_ID, from_date, to_date, reason, status
-                FROM Accidental_Leave
-                WHERE employee_ID = @employee_ID
-                  AND MONTH(from_date) = MONTH(GETDATE())
-                  AND YEAR(from_date) = YEAR(GETDATE())
-                ORDER BY from_date DESC
+            .query(` 
+                SELECT *
+                FROM dbo.status_leaves(@employee_ID)
             `);
 
         res.json({ success: true, leaves: result.recordset });
@@ -1368,6 +1480,354 @@ app.get('/api/academic/leaves/status/current-month', async (req, res) => {
     }
 });
 
+
+// ============================================ Academic Employee Part 2 ============================
+
+// Get User Role (for conditional UI)
+app.get('/api/academic/user-role', async (req, res) => {
+    try {
+        const { employeeId } = req.query;
+        
+        if (!employeeId) {
+            return res.status(400).json({ success: false, error: "Employee ID is required" });
+        }
+
+        const connection = await db.connectDB();
+        const result = await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .query(`
+                SELECT TOP 1 er.role_name
+                FROM Employee_Role er
+                INNER JOIN Role r ON er.role_name = r.role_name
+                WHERE er.emp_ID = @employee_ID
+                ORDER BY r.rank ASC
+            `);
+
+        if (!result.recordset || result.recordset.length === 0) {
+            return res.json({ success: true, role: null });
+        }
+
+        res.json({ success: true, role: result.recordset[0].role_name });
+    } catch (err) {
+        console.error('Get user role error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 1. Submit Accidental Leave
+app.post('/api/academic/leaves/accidental/apply', async (req, res) => {
+    try {
+        const { employeeId, fromDate, toDate } = req.body;
+        
+        if (!employeeId || !fromDate || !toDate) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
+        }
+
+        // Validate date format
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(fromDate) || !dateRegex.test(toDate)) {
+            return res.status(400).json({ success: false, error: "Invalid date format" });
+        }
+
+        // Validate date order
+        if (new Date(fromDate) > new Date(toDate)) {
+            return res.status(400).json({ success: false, error: "Start date must be before end date" });
+        }
+
+        const connection = await db.connectDB();
+        await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .input('start_date', fromDate)
+            .input('end_date', toDate)
+            .execute('Submit_accidental');
+            
+        res.json({ success: true, message: "Accidental leave application submitted successfully" });
+    } catch (err) {
+        console.error('Accidental leave error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 2. Submit Medical Leave
+app.post('/api/academic/leaves/medical/apply', async (req, res) => {
+    try {
+        const { 
+            employeeId, 
+            fromDate, 
+            toDate, 
+            medicalType, 
+            insuranceStatus, 
+            disabilityDetails, 
+            documentDescription, 
+            fileName 
+        } = req.body;
+        
+        if (!employeeId || !fromDate || !toDate || !medicalType || 
+            insuranceStatus === undefined || !documentDescription || !fileName) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
+        }
+
+        // Validate date format
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(fromDate) || !dateRegex.test(toDate)) {
+            return res.status(400).json({ success: false, error: "Invalid date format" });
+        }
+
+        // Validate date order
+        if (new Date(fromDate) > new Date(toDate)) {
+            return res.status(400).json({ success: false, error: "Start date must be before end date" });
+        }
+
+        const connection = await db.connectDB();
+        const sql = await import('mssql');
+        await connection.request()
+            .input('employee_ID', sql.default.Int, parseInt(employeeId))
+            .input('start_date', sql.default.Date, fromDate)
+            .input('end_date', sql.default.Date, toDate)
+            .input('medical_type', sql.default.VarChar(50), medicalType)
+            .input('insurance_status', sql.default.Bit, insuranceStatus ? 1 : 0)
+            .input('disability_details', sql.default.VarChar(50), disabilityDetails && disabilityDetails.trim() ? disabilityDetails : null)
+            .input('document_description', sql.default.VarChar(50), documentDescription)
+            .input('file_name', sql.default.VarChar(50), fileName)
+            .execute('Submit_medical');
+            
+        res.json({ success: true, message: "Medical leave application submitted successfully" });
+    } catch (err) {
+        console.error('Medical leave error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 3. Submit Unpaid Leave
+app.post('/api/academic/leaves/unpaid/apply', async (req, res) => {
+    try {
+        const { 
+            employeeId, 
+            fromDate, 
+            toDate, 
+            documentDescription, 
+            fileName 
+        } = req.body;
+        
+        if (!employeeId || !fromDate || !toDate || !documentDescription || !fileName) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
+        }
+
+        // Validate date format
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(fromDate) || !dateRegex.test(toDate)) {
+            return res.status(400).json({ success: false, error: "Invalid date format" });
+        }
+
+        // Validate date order
+        if (new Date(fromDate) > new Date(toDate)) {
+            return res.status(400).json({ success: false, error: "Start date must be before end date" });
+        }
+
+        const connection = await db.connectDB();
+        await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .input('start_date', fromDate)
+            .input('end_date', toDate)
+            .input('document_description', documentDescription)
+            .input('file_name', fileName)
+            .execute('Submit_unpaid');
+            
+        res.json({ success: true, message: "Unpaid leave application submitted successfully" });
+    } catch (err) {
+        console.error('Unpaid leave error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 4. Submit Compensation Leave
+app.post('/api/academic/leaves/compensation/apply', async (req, res) => {
+    try {
+        const { 
+            employeeId, 
+            compensationDate, 
+            reason, 
+            dateOfOriginalWorkday, 
+            replacementEmp 
+        } = req.body;
+        
+        if (!employeeId || !compensationDate || !reason || !dateOfOriginalWorkday || !replacementEmp) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
+        }
+
+        // Validate date format
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(compensationDate) || !dateRegex.test(dateOfOriginalWorkday)) {
+            return res.status(400).json({ success: false, error: "Invalid date format" });
+        }
+
+        const connection = await db.connectDB();
+        await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .input('compensation_date', compensationDate)
+            .input('reason', reason)
+            .input('date_of_original_workday', dateOfOriginalWorkday)
+            .input('rep_emp_id', parseInt(replacementEmp))
+            .execute('Submit_compensation');
+            
+        res.json({ success: true, message: "Compensation leave application submitted successfully" });
+    } catch (err) {
+        console.error('Compensation leave error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 5. Upperboard Approve/Reject Annual Leave (Dean/Vice-dean/President)
+app.put('/api/academic/leaves/annual/upperboard-approve', async (req, res) => {
+    try {
+        const { requestId, upperboardId, replacementId } = req.body;
+        
+        console.log('Annual approval request:', { requestId, upperboardId, replacementId });
+        
+        if (!requestId || !upperboardId || !replacementId) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
+        }
+
+        const connection = await db.connectDB();
+        
+        // Check if request exists in Annual_Leave
+        const leaveCheck = await connection.request()
+            .input('request_ID', parseInt(requestId))
+            .query(`SELECT 1 FROM Annual_Leave WHERE request_ID = @request_ID`);
+
+        if (!leaveCheck.recordset || leaveCheck.recordset.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                error: "Request ID not found in annual leaves" 
+            });
+        }
+
+        // Check if this upperboard member is assigned to approve this leav
+        await connection.request()
+            .input('request_ID', parseInt(requestId))
+            .input('Upperboard_ID', parseInt(upperboardId))
+            .input('replacement_ID', parseInt(replacementId))
+            .execute('Upperboard_approve_annual');
+
+        // Check what happened after the procedure
+        res.json({ success: true, message: "Annual leave processed successfully" });
+    } catch (err) {
+        console.error('Upperboard annual approval error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 6. Upperboard Approve/Reject Unpaid Leave (Dean/Vice-dean/President)
+app.put('/api/academic/leaves/unpaid/upperboard-approve', async (req, res) => {
+    try {
+        const { requestId, upperboardId } = req.body;
+        
+        if (!requestId || !upperboardId) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
+        }
+
+        const connection = await db.connectDB();
+        
+        // Check if request exists in Unpaid_Leave
+        const leaveCheck = await connection.request()
+            .input('request_ID', parseInt(requestId))
+            .query(`SELECT 1 FROM Unpaid_Leave WHERE request_ID = @request_ID`);
+
+        if (!leaveCheck.recordset || leaveCheck.recordset.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                error: "Request ID not found in unpaid leaves" 
+            });
+        }
+        
+        await connection.request()
+            .input('request_ID', parseInt(requestId))
+            .input('upperboard_ID', parseInt(upperboardId))
+            .execute('Upperboard_approve_unpaids');
+            
+        res.json({ success: true, message: "Unpaid leave processed successfully" });
+    } catch (err) {
+        console.error('Upperboard unpaid approval error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 7. Dean Evaluation (Dean only)
+app.post('/api/academic/evaluation/dean', async (req, res) => {
+    try {
+        const { deanId, employeeId, rating, comment, semester } = req.body;
+        
+        if (!deanId || !employeeId || !rating || !comment || !semester) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
+        }
+
+        // Validate semester format: W## or S##
+        const semesterPattern = /^[WS]\d{2}$/;
+        if (!semesterPattern.test(semester)) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Invalid semester format. Must be W## or S## (e.g., W24, S23)" 
+            });
+        }
+
+        // Validate rating (1-5 scale)
+        const ratingNum = parseInt(rating);
+        if (ratingNum < 1 || ratingNum > 5) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Rating must be between 1 and 5" 
+            });
+        }
+
+        const connection = await db.connectDB();
+
+        // Verify dean role
+        const roleCheck = await connection.request()
+            .input('dean_ID', parseInt(deanId))
+            .query(`
+                SELECT 1 FROM Employee_Role 
+                WHERE emp_ID = @dean_ID AND role_name = 'Dean'
+            `);
+
+        if (!roleCheck.recordset || roleCheck.recordset.length === 0) {
+            return res.status(403).json({ 
+                success: false, 
+                error: "Only Deans can evaluate employees" 
+            });
+        }
+
+        // Verify employee is in the same department as dean
+        const deptCheck = await connection.request()
+            .input('dean_ID', parseInt(deanId))
+            .input('employee_ID', parseInt(employeeId))
+            .query(`
+                SELECT 1 
+                FROM Employee E1
+                INNER JOIN Employee E2 ON E1.dept_name = E2.dept_name
+                WHERE E1.employee_id = @dean_ID 
+                AND E2.employee_id = @employee_ID
+            `);
+
+        if (!deptCheck.recordset || deptCheck.recordset.length === 0) {
+            return res.status(403).json({ 
+                success: false, 
+                error: "Dean can only evaluate employees in the same department" 
+            });
+        }
+
+        await connection.request()
+            .input('employee_ID', parseInt(employeeId))
+            .input('rating', ratingNum)
+            .input('comment', comment)
+            .input('semester', semester)
+            .execute('Dean_andHR_Evaluation');
+            
+        res.json({ success: true, message: "Employee evaluation submitted successfully" });
+    } catch (err) {
+        console.error('Dean evaluation error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 
 const PORT = process.env.PORT || 5001;

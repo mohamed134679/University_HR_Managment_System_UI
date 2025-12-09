@@ -4,3 +4,5 @@ export      { default as Payroll } from "./Payroll";
 export      { default as Deductions } from "./Deductions";
 export      { default as ApplyLeave } from "./ApplyLeave";
 export      { default as LeaveStatus } from "./LeaveStatus";
+export      { default as DeanEvaluation } from "./DeanEvaluation";
+export      { default as UpperboardApprovals } from "./UpperboardApprovals";

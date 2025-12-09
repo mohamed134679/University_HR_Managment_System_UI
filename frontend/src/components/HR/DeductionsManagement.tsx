@@ -17,6 +17,7 @@ const DeductionsManagement = ({ hrId }: DeductionsManagementProps) => {
   const [warning, setWarning] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [employeeIdDays, setEmployeeIdDays] = useState("");
+  const [employeeIdUnpaid, setEmployeeIdUnpaid] = useState("");
 
   const handleSubmitHours = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,11 +89,51 @@ const DeductionsManagement = ({ hrId }: DeductionsManagementProps) => {
     }
   };
 
+  const handleSubmitUnpaid = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      setError("");
+      setSuccess("");
+      setWarning("");
+
+      const response = await fetch("http://localhost:5001/api/hr/deductions/unpaid-leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: employeeIdUnpaid }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.success === false) {
+        if (data.message && data.message.includes("No approved unpaid leave")) {
+          setWarning(data.message);
+        } else {
+          setError(data.error || data.message || "Failed to process deduction");
+        }
+        return;
+      }
+
+      // Check if it's an "already exists" message
+      if (data.message.includes("already")) {
+        setWarning(data.message);
+      } else {
+        setSuccess(data.message);
+      }
+      setEmployeeIdUnpaid("");
+    } catch (err) {
+      setError("Failed to process deduction. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Tabs defaultValue="missing-hours" className="space-y-4">
       <TabsList>
         <TabsTrigger value="missing-hours">Missing Hours</TabsTrigger>
         <TabsTrigger value="missing-days">Missing Days</TabsTrigger>
+        <TabsTrigger value="unpaid-leave">Unpaid Leave</TabsTrigger>
       </TabsList>
 
       {error && (
@@ -164,6 +205,36 @@ const DeductionsManagement = ({ hrId }: DeductionsManagementProps) => {
                   placeholder="Enter employee ID"
                   value={employeeIdDays}
                   onChange={(e) => setEmployeeIdDays(e.target.value)}
+                  required
+                />
+              </div>
+
+              <Button type="submit" disabled={loading} className="w-full">
+                {loading ? "Processing..." : "Process Deduction"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="unpaid-leave">
+        <Card>
+          <CardHeader>
+            <CardTitle>Process Unpaid Leave Deduction</CardTitle>
+            <CardDescription>
+              Enter employee ID to process deduction for approved unpaid leave in current month
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmitUnpaid} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="employee-id-unpaid">Employee ID</Label>
+                <Input
+                  id="employee-id-unpaid"
+                  type="number"
+                  placeholder="Enter employee ID"
+                  value={employeeIdUnpaid}
+                  onChange={(e) => setEmployeeIdUnpaid(e.target.value)}
                   required
                 />
               </div>
